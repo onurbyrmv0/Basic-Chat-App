@@ -13,6 +13,9 @@ const fileInput = ref(null);
 const messagesContainer = ref(null);
 const socket = ref(null);
 const connectionError = ref(false);
+const isRecording = ref(false);
+const mediaRecorder = ref(null);
+const audioChunks = ref([]);
 
 const avatars = [
   'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
@@ -122,6 +125,67 @@ const formatTime = (dateStr) => {
     if (!dateStr) return '';
     const date = new Date(dateStr);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const formatTime = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+const startRecording = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder.value = new MediaRecorder(stream);
+    audioChunks.value = [];
+
+    mediaRecorder.value.ondataavailable = (event) => {
+      audioChunks.value.push(event.data);
+    };
+
+    mediaRecorder.value.onstop = async () => {
+      const audioBlob = new Blob(audioChunks.value, { type: 'audio/webm' });
+      const audioFile = new File([audioBlob], 'voice-message.webm', { type: 'audio/webm' });
+      await uploadAudio(audioFile);
+    };
+
+    mediaRecorder.value.start();
+    isRecording.value = true;
+  } catch (err) {
+    console.error('Error accessing microphone:', err);
+    alert('Microphone access denied or not supported.');
+  }
+};
+
+const stopRecording = () => {
+  if (mediaRecorder.value && isRecording.value) {
+    mediaRecorder.value.stop();
+    isRecording.value = false;
+    mediaRecorder.value.stream.getTracks().forEach(track => track.stop());
+  }
+};
+
+const uploadAudio = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const res = await axios.post(`${BACKEND_URL}/upload`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        const { url } = res.data;
+        
+         const msgData = {
+            nickname: nickname.value,
+            avatar: avatar.value,
+            content: '',
+            type: 'audio',
+            fileUrl: url
+        };
+        socket.value.emit('sendMessage', msgData);
+
+    } catch (err) {
+        console.error('Audio upload failed', err);
+        alert('Failed to send voice message.');
+    }
 };
 
 </script>
@@ -232,6 +296,12 @@ const formatTime = (dateStr) => {
 
                         <!-- Video -->
                         <video v-else-if="msg.type === 'video'" controls :src="msg.fileUrl" class="rounded-xl max-h-72 border border-black/20 w-full bg-black"></video>
+
+                        <!-- Audio -->
+                        <div v-else-if="msg.type === 'audio'" class="flex items-center gap-2 min-w-[200px]">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-indigo-300"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                            <audio controls :src="msg.fileUrl" class="w-full h-8"></audio>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -245,6 +315,23 @@ const formatTime = (dateStr) => {
                 <input ref="fileInput" type="file" @change="handleFileUpload" class="hidden" accept="image/*,video/*">
                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
             </label>
+            
+            <button 
+                v-if="!isRecording"
+                @click="startRecording"
+                class="p-3 bg-gray-700/50 hover:bg-gray-700 text-gray-400 hover:text-red-400 rounded-full border border-gray-600 hover:border-red-500/50 shadow-sm flex-shrink-0 active:scale-95 transition-all"
+                title="Record Voice Message"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+            </button>
+            <button 
+                v-else
+                @click="stopRecording"
+                class="p-3 bg-red-600 hover:bg-red-500 text-white rounded-full shadow-md animate-pulse flex-shrink-0 active:scale-95 transition-all"
+                title="Stop Recording"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+            </button>
             
             <div class="flex-1 bg-gray-700/50 rounded-3xl flex items-center border border-gray-600 focus-within:ring-2 focus-within:ring-indigo-500/50 focus-within:border-indigo-500 focus-within:bg-gray-700 transition-all shadow-inner">
                 <textarea 
