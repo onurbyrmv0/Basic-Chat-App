@@ -128,19 +128,49 @@ const formatTime = (dateStr) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
+const getSupportedMimeType = () => {
+    const types = [
+        'audio/webm',
+        'audio/mp4',
+        'audio/ogg',
+        'audio/wav',
+        'audio/aac'
+    ];
+    for (const type of types) {
+        if (MediaRecorder.isTypeSupported(type)) {
+            return type;
+        }
+    }
+    return ''; // Browser default
+};
+
 const startRecording = async () => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorder.value = new MediaRecorder(stream);
+    
+    // Choose connection-friendly mime type
+    // Safari often prefers mp4 generally, Chrome prefers webm
+    let mimeType = getSupportedMimeType();
+    
+    // Fallback options object if needed or let browser decide
+    const options = mimeType ? { mimeType } : undefined;
+    
+    mediaRecorder.value = new MediaRecorder(stream, options);
     audioChunks.value = [];
 
     mediaRecorder.value.ondataavailable = (event) => {
-      audioChunks.value.push(event.data);
+      if (event.data.size > 0) {
+        audioChunks.value.push(event.data);
+      }
     };
 
     mediaRecorder.value.onstop = async () => {
-      const audioBlob = new Blob(audioChunks.value, { type: 'audio/webm' });
-      const audioFile = new File([audioBlob], 'voice-message.webm', { type: 'audio/webm' });
+      // Use the actual mime type of the recorder if available, or fallback to what we tried
+      const finalMimeType = mediaRecorder.value.mimeType || mimeType || 'audio/webm';
+      const ext = finalMimeType.split('/')[1]?.split(';')[0] || 'webm';
+      
+      const audioBlob = new Blob(audioChunks.value, { type: finalMimeType });
+      const audioFile = new File([audioBlob], `voice-message.${ext}`, { type: finalMimeType });
       await uploadAudio(audioFile);
     };
 
