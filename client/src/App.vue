@@ -29,7 +29,10 @@ const joinChat = () => {
   if (!nickname.value.trim()) return;
   
   // Connect to Socket.io
-  socket.value = io(BACKEND_URL);
+  socket.value = io(BACKEND_URL, {
+    transports: ['websocket', 'polling'], // Try websocket first, fallback to polling
+    withCredentials: false
+  });
 
   socket.value.on('connect', () => {
     connectionError.value = false;
