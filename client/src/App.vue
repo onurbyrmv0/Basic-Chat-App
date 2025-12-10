@@ -190,6 +190,23 @@ const stopRecording = () => {
   }
 };
 
+const cancelRecording = () => {
+  if (mediaRecorder.value && isRecording.value) {
+     mediaRecorder.value.onstop = null; // Prevent upload
+     mediaRecorder.value.stop();
+     isRecording.value = false;
+     mediaRecorder.value.stream.getTracks().forEach(track => track.stop());
+     audioChunks.value = [];
+  }
+};
+
+const clearChat = () => {
+    const secret = prompt('Enter Admin Key to Clear Chat:');
+    if (secret) {
+        socket.value.emit('clearChat', secret);
+    }
+};
+
 const uploadAudio = async (file) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -283,6 +300,9 @@ const uploadAudio = async (file) => {
             </div>
         </div>
         <div class="flex items-center gap-3 bg-gray-900/50 py-1.5 px-3 rounded-full border border-gray-700/50">
+             <button @click="clearChat" class="text-gray-400 hover:text-red-400 transition-colors" title="Clear Chat (Admin)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+             </button>
              <span class="font-semibold text-gray-200 text-sm truncate max-w-[100px]">{{ nickname }}</span>
              <img :src="avatar" class="w-8 h-8 rounded-full bg-gray-700 border border-gray-600">
         </div>
@@ -351,14 +371,23 @@ const uploadAudio = async (file) => {
             >
                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
             </button>
-            <button 
-                v-else
-                @click="stopRecording"
-                class="p-3 bg-red-600 hover:bg-red-500 text-white rounded-full shadow-md animate-pulse flex-shrink-0 active:scale-95 transition-all"
-                title="Stop Recording"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
-            </button>
+            <div v-else class="flex gap-2">
+                 <button 
+                    @click="cancelRecording"
+                    class="p-3 bg-gray-600 hover:bg-gray-500 text-white rounded-full shadow-md flex-shrink-0 active:scale-95 transition-all"
+                    title="Cancel Recording"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+                <button 
+                    @click="stopRecording"
+                    class="p-3 bg-red-600 hover:bg-red-500 text-white rounded-full shadow-md animate-pulse flex-shrink-0 active:scale-95 transition-all"
+                    title="Send Voice Message"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+                </button>
+            </div>
+
             
             <div class="flex-1 bg-gray-700/50 rounded-3xl flex items-center border border-gray-600 focus-within:ring-2 focus-within:ring-indigo-500/50 focus-within:border-indigo-500 focus-within:bg-gray-700 transition-all shadow-inner">
                 <textarea 

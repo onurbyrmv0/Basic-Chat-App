@@ -131,6 +131,28 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
   });
+  
+  // Admin Features
+  const ADMIN_SECRET = process.env.ADMIN_SECRET || 'admin123';
+  
+  socket.on('clearChat', async (secret) => {
+      if (secret === ADMIN_SECRET) {
+          try {
+              if (mongoConnected) {
+                  await Message.deleteMany({});
+              } else {
+                  messageMemoryStore = [];
+              }
+              io.emit('history', []); // Clear client view
+              io.emit('notification', '⚠ Chat history has been cleared by an Admin');
+          } catch (e) {
+              console.error(e);
+              socket.emit('notification', 'Error clearing chat');
+          }
+      } else {
+           socket.emit('notification', '❌ Invalid Admin Secret!');
+      }
+  });
 });
 
 const PORT = 3000;
