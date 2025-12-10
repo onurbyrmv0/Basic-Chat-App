@@ -63,3 +63,42 @@ When you make changes locally:
     git pull
     docker-compose up -d --build
     ```
+
+## 4. Domain Setup (CloudPanel)
+If you want to use a domain (e.g., `chat.yourdomain.com`), you need to configure the Reverse Proxy in CloudPanel.
+
+1.  Go to **CloudPanel** -> **Sites** -> **Manage Site** -> **Vhost**.
+2.  Replace the `location /` block (and add others) with this configuration:
+
+```nginx
+    # Serve Frontend (Port 8090)
+    location / {
+        proxy_pass http://127.0.0.1:8090;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Proxy Socket.io to Backend (Port 3000)
+    location /socket.io/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+
+    # Proxy API Uploads to Backend (Port 3000)
+    location /upload {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+    }
+
+    location /uploads {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+    }
+```
+3.  **Save** the Vhost configuration.
+
