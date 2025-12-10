@@ -70,7 +70,8 @@ app.post('/upload', upload.single('file'), (req, res) => {
 });
 
 // Catch-all route to serve index.html for Vue Router
-app.get('*', (req, res) => {
+// Catch-all route to serve index.html for Vue Router
+app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, '../client/dist/index.html'));
 });
 
