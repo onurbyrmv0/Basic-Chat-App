@@ -121,10 +121,7 @@ const scrollToBottom = async () => {
   }
 };
 
-const formatTime = (dateStr) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
 const formatTime = (dateStr) => {
     if (!dateStr) return '';
     const date = new Date(dateStr);
