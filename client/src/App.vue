@@ -23,7 +23,7 @@ const avatars = [
 ];
 
 // Backend URL (dynamic for production)
-const BACKEND_URL = import.meta.env.PROD ? '/' : 'http://localhost:3000';
+const BACKEND_URL = import.meta.env.PROD ? '' : 'http://localhost:3000';
 
 const joinChat = () => {
   if (!nickname.value.trim()) return;
