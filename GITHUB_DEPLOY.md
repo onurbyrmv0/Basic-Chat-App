@@ -46,7 +46,7 @@ Login to your server (DigitalOcean Droplet or CloudPanel SSH).
     ```
 
 4.  **Verify**:
-    - Frontend: `http://YOUR_SERVER_IP:8080`
+    - Frontend: `http://YOUR_SERVER_IP:8090`
     - Backend: `http://YOUR_SERVER_IP:3000`
 
 ## 3. Updating Code

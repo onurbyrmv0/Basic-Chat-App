@@ -15,7 +15,7 @@ This project includes Docker support for easy deployment and local development.
     ```
 
 2.  **Access the Application**
-    - **Frontend:** [http://localhost:8080](http://localhost:8080)
+    - **Frontend:** [http://localhost:8090](http://localhost:8090)
     - **Backend:** [http://localhost:3000](http://localhost:3000) (API)
     - **MongoDB:** `localhost:27017`
 
