@@ -22,8 +22,8 @@ const avatars = [
   'https://api.dicebear.com/7.x/bottts/svg?seed=Bender',
 ];
 
-// Backend URL (adjust if deployed)
-const BACKEND_URL = 'http://localhost:3000';
+// Backend URL (dynamic for production)
+const BACKEND_URL = import.meta.env.PROD ? '/' : 'http://localhost:3000';
 
 const joinChat = () => {
   if (!nickname.value.trim()) return;
