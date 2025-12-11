@@ -400,7 +400,7 @@ const uploadAudio = async (file) => {
                 <div :class="['max-w-[85%] md:max-w-[70%] flex flex-col', msg.nickname === nickname ? 'items-end' : 'items-start']">
                     
                     <!-- Reply Context -->
-                    <div v-if="msg.replyTo" class="mb-1 text-xs text-gray-400 flex items-center gap-1 opacity-75 hover:opacity-100 transition-opacity cursor-pointer" @click="/* Scroll to message logic could go here */">
+                    <div v-if="msg.replyTo" class="mb-1 text-xs text-gray-400 flex items-center gap-1 opacity-75 hover:opacity-100 transition-opacity cursor-pointer">
                         <span class="bg-gray-700/50 px-2 py-1 rounded-lg border-l-2 border-indigo-500 line-clamp-1">
                             Replying to <span class="font-bold text-indigo-300">{{ msg.replyTo.nickname }}</span>: {{ msg.replyTo.content }}
                         </span>
