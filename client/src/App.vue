@@ -516,6 +516,7 @@ const uploadAudio = async (file) => {
       </footer>
     </div>
   </div>
+ </div>
 </template>
 
 <style>
