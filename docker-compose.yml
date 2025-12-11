@@ -21,6 +21,7 @@ services:
       - mongo
     volumes:
       - ./server/uploads:/app/uploads
+      - ./backups:/app/backups
 
   client:
     build: ./client

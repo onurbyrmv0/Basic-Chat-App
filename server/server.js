@@ -11,6 +11,8 @@ const Room = require('./models/Room');
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const cron = require('node-cron');
+const { exec } = require('child_process');
 require('dotenv').config();
 
 const app = express();
@@ -507,7 +509,35 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = 3000;
+// ---------------- SCHEDULED BACKUPS ----------------
+// Run every hour: 0 * * * *
+cron.schedule('0 * * * *', () => {
+    console.log('⏳ Starting scheduled backup...');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `backup-${timestamp}.archive`;
+    const backupPath = path.join(__dirname, '../backups', filename); // Mapped to /app/backups
+
+    // Ensure directory exists
+    if (!fs.existsSync(path.join(__dirname, '../backups'))) {
+        fs.mkdirSync(path.join(__dirname, '../backups'));
+    }
+
+    // Command: mongodump --uri="mongodb://mongo:27017/chat-app" --archive=...
+    const cmd = `mongodump --uri="${MONGO_URI}" --archive="${backupPath}"`;
+
+    exec(cmd, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`❌ Backup failed: ${error.message}`);
+            return;
+        }
+        console.log(`✅ Backup successful: ${filename}`);
+        
+        // Optional: Delete backups older than 24 hours
+        // (For now, let's just keep them all or user can clean up)
+    });
+});
+
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => { 
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });

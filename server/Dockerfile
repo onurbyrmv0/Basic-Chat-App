@@ -4,6 +4,9 @@ WORKDIR /app
 
 COPY package*.json ./
 
+# Install mongodb-tools for backup capability
+RUN apk add --no-cache mongodb-tools
+
 RUN npm install
 
 COPY . .
