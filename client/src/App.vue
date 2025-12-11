@@ -471,7 +471,18 @@ const getPreview = (text) => {
 
             <!-- User Message -->
             <div v-else :class="['flex gap-3 md:gap-4 group animate-fade-in-up relative', msg.nickname === nickname ? 'flex-row-reverse' : 'flex-row']">
-                <img :src="msg.avatar" class="w-8 h-8 md:w-10 md:h-10 rounded-full shadow-md mt-1 bg-gray-800 object-cover border-2 border-gray-700 flex-shrink-0">
+                <div class="flex flex-col items-center gap-1">
+                    <img :src="msg.avatar" class="w-8 h-8 md:w-10 md:h-10 rounded-full shadow-md mt-1 bg-gray-800 object-cover border-2 border-gray-700 flex-shrink-0">
+                    
+                    <!-- Reply Action (Under Avatar) -->
+                    <button 
+                        @click.stop="setReply(msg)" 
+                        class="p-1.5 text-gray-500 hover:text-white hover:bg-indigo-500/50 rounded-full transition-all"
+                        title="Reply"
+                    >
+                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
+                    </button>
+                </div>
                 
                 <div :class="['max-w-[85%] md:max-w-[70%] flex flex-col', msg.nickname === nickname ? 'items-end' : 'items-start']">
                     
@@ -532,18 +543,8 @@ const getPreview = (text) => {
                             </div>
                         </div>
 
-                        <!-- Reply Action (Inside Bubble) -->
-                        <button 
-                            @click.stop="setReply(msg)" 
-                            class="absolute -top-2 -right-2 p-1.5 text-gray-400 hover:text-white bg-gray-700 hover:bg-indigo-500 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-all z-20 md:opacity-0"
-                            :class="{'opacity-100': showMobileMenu || true /* Always visible on mobile? No, let's make it opacity-100 on mobile via media query default or just force visible */}"
-                            title="Reply"
-                        >
-                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
-                        </button>
+                        <!-- Reply Action (Inside Bubble) REMOVED -->
                     </div>
-                    
-                    
                 </div>
             </div>
         </div>
