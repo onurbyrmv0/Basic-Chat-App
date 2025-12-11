@@ -21,7 +21,6 @@ const onlineUsers = ref([]);
 const replyingTo = ref(null);
 const showMobileMenu = ref(false);
 const searchQuery = ref('');
-const searchQuery = ref('');
 const linkPreviews = reactive(new Map()); // url -> meta object
 const password = ref('');
 const isLoginMode = ref(true); // Toggle between Login and Register
