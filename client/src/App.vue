@@ -21,10 +21,22 @@ const onlineUsers = ref([]);
 const replyingTo = ref(null);
 const showMobileMenu = ref(false);
 const searchQuery = ref('');
+const searchQuery = ref('');
 const linkPreviews = reactive(new Map()); // url -> meta object
 const password = ref('');
 const isLoginMode = ref(true); // Toggle between Login and Register
 let typingTimeout = null;
+
+// ROOM STATE
+const rooms = ref([]);
+const currentRoom = ref('General');
+const showCreateRoomModal = ref(false);
+const showPasswordModal = ref(false);
+const newRoomName = ref('');
+const newRoomPassword = ref('');
+const roomToJoin = ref(null);
+const roomJoinPassword = ref('');
+const joinedRooms = ref(new Set(['General'])); // Track rooms we have unlocked this session
 
 const avatars = [
   'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
@@ -74,13 +86,12 @@ const joinChat = () => {
     transports: ['websocket', 'polling'], 
     withCredentials: false
   });
-  // ... socket setup continues ...
-
 
   socket.value.on('connect', () => {
     connectionError.value = false;
     joined.value = true;
-    socket.value.emit('join', { nickname: nickname.value, avatar: avatar.value }); // Send actual avatar from DB if needed
+    socket.value.emit('join', { nickname: nickname.value, avatar: avatar.value, room: currentRoom.value }); 
+    fetchRooms();
   });
 
   socket.value.on('connect_error', () => {

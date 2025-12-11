@@ -7,6 +7,7 @@ const multer = require('multer');
 const path = require('path');
 const Message = require('./models/Message');
 const User = require('./models/User');
+const Room = require('./models/Room');
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const cheerio = require('cheerio');
@@ -53,7 +54,7 @@ const upload = multer({ storage: storage });
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/chat-app';
 let mongoConnected = false;
-let messageMemoryStore = []; // Fallback store
+let messageMemoryStore = []; // Fallback store (Only for General)
 
 mongoose.connect(MONGO_URI)
   .then(() => {
@@ -69,34 +70,27 @@ mongoose.connect(MONGO_URI)
 
 // REGISTER
 app.post('/api/auth/register', async (req, res) => {
-    console.log('🔹 register request:', req.body);
     try {
-        let { nickname, password, avatar } = req.body;
+        const { nickname, password, avatar } = req.body;
         
-        // Validation
         if (!nickname || !password || password.length < 4) {
             return res.status(400).json({ error: 'Nickname and password (min 4 chars) required.' });
         }
 
-        nickname = nickname.trim(); // TRIM INPUT
-
-        // Case-insensitive check
-        const existingUser = await User.findOne({ nickname: { $regex: new RegExp(`^${nickname}$`, 'i') } });
+        const existingUser = await User.findOne({ nickname });
         if (existingUser) {
-            console.log('⚠️ Nickname taken:', nickname);
             return res.status(400).json({ error: 'Nickname already exists.' });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
         
         const newUser = new User({
-            nickname, // We save the trimmed, original casing (or we could lowercase it)
+            nickname,
             password: hashedPassword,
             avatar: avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${nickname}`
         });
 
         await newUser.save();
-        console.log('✅ User registered:', newUser.nickname);
 
         res.status(201).json({ 
             message: 'User registered successfully',
@@ -104,43 +98,95 @@ app.post('/api/auth/register', async (req, res) => {
         });
 
     } catch (err) {
-        console.error('❌ Registration Error:', err);
+        console.error('Registration Error:', err);
         res.status(500).json({ error: 'Server error during registration.' });
     }
 });
 
 // LOGIN
 app.post('/api/auth/login', async (req, res) => {
-    console.log('🔹 login request:', req.body);
     try {
-        let { nickname, password } = req.body;
+        const { nickname, password } = req.body;
 
-        if(!nickname || !password) return res.status(400).json({ error: 'Missing fields' });
-
-        nickname = nickname.trim();
-
-        // Case-insensitive find
-        const user = await User.findOne({ nickname: { $regex: new RegExp(`^${nickname}$`, 'i') } });
-        if (!user) {
-            console.log('⚠️ Login failed: User not found for:', nickname);
-            return res.status(400).json({ error: 'User not found.' });
-        }
+        const user = await User.findOne({ nickname });
+        if (!user) return res.status(400).json({ error: 'User not found.' });
 
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            console.log('⚠️ Login failed: Invalid password for:', nickname);
-            return res.status(400).json({ error: 'Invalid credentials.' });
-        }
+        if (!isMatch) return res.status(400).json({ error: 'Invalid credentials.' });
 
-        console.log('✅ User logged in:', user.nickname);
         res.json({ 
             message: 'Login successful',
             user: { nickname: user.nickname, avatar: user.avatar, _id: user._id }
         });
 
     } catch (err) {
-        console.error('❌ Login Error:', err);
+        console.error('Login Error:', err);
         res.status(500).json({ error: 'Server error during login.' });
+    }
+});
+
+// ---------------- ROOM ROUTES ----------------
+
+// GET ROOMS
+app.get('/api/rooms', async (req, res) => {
+    try {
+        if (!mongoConnected) return res.json([]);
+        // Return only names and IDs
+        const rooms = await Room.find({}, 'name createdAt createdBy'); 
+        res.json(rooms);
+    } catch (err) {
+        console.error('Get Rooms Error:', err);
+        res.status(500).json({ error: 'Error fetching rooms' });
+    }
+});
+
+// CREATE ROOM
+app.post('/api/rooms', async (req, res) => {
+    try {
+        const { name, password, userId } = req.body;
+
+        if (!name || !password || !userId) {
+            return res.status(400).json({ error: 'Name, Password and UserID required.' });
+        }
+
+        const existingRoom = await Room.findOne({ name });
+        if (existingRoom) {
+            return res.status(400).json({ error: 'Room name already exists.' });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        const newRoom = new Room({
+            name,
+            password: hashedPassword,
+            createdBy: userId
+        });
+
+        await newRoom.save();
+        res.status(201).json(newRoom);
+
+    } catch (err) {
+        console.error('Create Room Error:', err);
+        res.status(500).json({ error: 'Error creating room' });
+    }
+});
+
+// VERIFY ROOM PASSWORD
+app.post('/api/rooms/verify', async (req, res) => {
+    try {
+        const { roomId, password } = req.body;
+        const room = await Room.findById(roomId);
+        
+        if (!room) return res.status(404).json({ error: 'Room not found' });
+
+        const isMatch = await bcrypt.compare(password, room.password);
+        if (!isMatch) return res.status(400).json({ error: 'Invalid password' });
+
+        res.json({ success: true, name: room.name });
+
+    } catch (err) {
+        console.error('Verify Room Error:', err);
+        res.status(500).json({ error: 'Server error' });
     }
 });
 
@@ -165,7 +211,7 @@ app.get('/api/url-meta', async (req, res) => {
         res.json(meta);
     } catch (err) {
         console.error('Metadata fetch error:', err.message);
-        res.json({}); // Return empty on failure to prevent frontend break
+        res.json({}); 
     }
 });
 
@@ -173,8 +219,6 @@ app.post('/upload', upload.single('file'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
-  // Use relative path to avoid Mixed Content issues (http vs https)
-  // The frontend or Nginx will handle the domain/protocol resolution
   const fileUrl = `/uploads/${req.file.filename}`;
   res.json({ url: fileUrl, type: req.file.mimetype });
 });
@@ -184,63 +228,112 @@ app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, '../client/dist/index.html'));
 });
 
-const onlineUsers = new Map(); // socket.id -> { nickname, avatar }
+const onlineUsers = new Map(); // socket.id -> { nickname, avatar, room }
 
 // ---------------- SOCKET.IO LOGIC ----------------
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  // Send last 50 messages on join
-  const loadMessages = async () => {
+  // Send last 50 messages on join (ROOM AWARE)
+  const loadMessages = async (roomName) => {
     try {
       if (mongoConnected) {
-          const messages = await Message.find().sort({ timestamp: -1 }).limit(50);
+          const messages = await Message.find({ room: roomName }).sort({ timestamp: -1 }).limit(50);
           socket.emit('history', messages.reverse());
       } else {
-          // Fallback memory store
-          socket.emit('history', messageMemoryStore.slice(-50));
+          // Fallback memory store (only supports 'General' effectively)
+          if (roomName === 'General') {
+             socket.emit('history', messageMemoryStore.slice(-50));
+          } else {
+             socket.emit('history', []);
+          }
       }
     } catch (err) {
       console.error('Error fetching history:', err);
     }
   };
-  loadMessages();
 
-  socket.on('join', (userData) => {
-    console.log(`User joined: ${userData.nickname}`);
-    onlineUsers.set(socket.id, userData);
+  socket.on('join', (data) => {
+    // data: { nickname, avatar, room (optional, default General) }
+    const room = data.room || 'General';
+    console.log(`User joined room ${room}: ${data.nickname}`);
     
-    socket.join('General'); 
-    io.to('General').emit('notification', `${userData.nickname} joined the chat`);
-    io.to('General').emit('updateUserList', Array.from(onlineUsers.values()));
+    // Save user info with room
+    onlineUsers.set(socket.id, { ...data, room });
+    
+    // Join socket room
+    socket.join(room);
+
+    // Initial load
+    loadMessages(room);
+
+    // Notify others in room
+    socket.to(room).emit('notification', `${data.nickname} joined the chat`);
+    
+    // Update USER LIST for that room
+    const requestRoomUsers = Array.from(onlineUsers.values()).filter(u => u.room === room);
+    io.to(room).emit('updateUserList', requestRoomUsers);
+  });
+  
+  // SWITCH ROOM
+  socket.on('switchRoom', (newRoom) => {
+    const user = onlineUsers.get(socket.id);
+    if (!user) return;
+
+    const oldRoom = user.room || 'General';
+    
+    // Leave old
+    socket.leave(oldRoom);
+    socket.to(oldRoom).emit('notification', `${user.nickname} left the chat`);
+    const oldRoomUsers = Array.from(onlineUsers.values()).filter(u => u.room === oldRoom && u.nickname !== user.nickname);
+    io.to(oldRoom).emit('updateUserList', oldRoomUsers);
+
+    // Join new
+    user.room = newRoom;
+    onlineUsers.set(socket.id, user); 
+    socket.join(newRoom);
+    
+    // Load history for new room
+    loadMessages(newRoom);
+
+    // Notify new room
+    socket.to(newRoom).emit('notification', `${user.nickname} joined the chat`);
+    const newRoomUsers = Array.from(onlineUsers.values()).filter(u => u.room === newRoom);
+    io.to(newRoom).emit('updateUserList', newRoomUsers);
   });
 
   socket.on('typing', () => {
       const user = onlineUsers.get(socket.id);
-      if (user) socket.to('General').emit('userTyping', user.nickname);
+      if (user) socket.to(user.room).emit('userTyping', user.nickname);
   });
 
   socket.on('stopTyping', () => {
       const user = onlineUsers.get(socket.id);
-      if (user) socket.to('General').emit('userStopTyping', user.nickname);
+      if (user) socket.to(user.room).emit('userStopTyping', user.nickname);
   });
 
   socket.on('sendMessage', async (data) => {
-    console.log('Received message:', data);
+    // data needs to include 'room' now.
+    // However, we can trust the server's knowledge of the user's room to prevent spoofing
+    const user = onlineUsers.get(socket.id);
+    const room = user ? user.room : 'General';
+    
+    console.log(`Message in ${room}:`, data);
     
     try {
       const msgPayload = {
           ...data,
+          room: room, 
           timestamp: new Date()
       };
 
       if (mongoConnected) {
-          const newMessage = new Message(data);
+          const newMessage = new Message(msgPayload);
           await newMessage.save();
-          io.to('General').emit('message', newMessage);
+          io.to(room).emit('message', newMessage);
       } else {
-          messageMemoryStore.push(msgPayload);
-          io.to('General').emit('message', msgPayload);
+          if (room === 'General') messageMemoryStore.push(msgPayload);
+          io.to(room).emit('message', msgPayload);
       }
     } catch (err) {
       console.error('Error saving message:', err);
@@ -251,9 +344,12 @@ io.on('connection', (socket) => {
     console.log('User disconnected:', socket.id);
     const user = onlineUsers.get(socket.id);
     if (user) {
+        const room = user.room || 'General';
         onlineUsers.delete(socket.id);
-        io.to('General').emit('notification', `${user.nickname} left the chat`);
-        io.to('General').emit('updateUserList', Array.from(onlineUsers.values()));
+        
+        io.to(room).emit('notification', `${user.nickname} left the chat`);
+        const remainingUsers = Array.from(onlineUsers.values()).filter(u => u.room === room);
+        io.to(room).emit('updateUserList', remainingUsers);
     }
   });
   
@@ -261,15 +357,22 @@ io.on('connection', (socket) => {
   const ADMIN_SECRET = process.env.ADMIN_SECRET || 'admin123';
   
   socket.on('clearChat', async (secret) => {
+      // NOTE: This currently clears ALL chat. We might want to scope it to rooms later.
+      // For now, let's keep it global or assume it clears 'General'.
+      // Let's make it clear ONLY the room the admin is in?
+      
+      const user = onlineUsers.get(socket.id);
+      const room = user ? user.room : 'General';
+
       if (secret === ADMIN_SECRET) {
           try {
               if (mongoConnected) {
-                  await Message.deleteMany({});
+                  await Message.deleteMany({ room: room }); // Clear only current room
               } else {
-                  messageMemoryStore = [];
+                  if (room === 'General') messageMemoryStore = [];
               }
-              io.emit('history', []); // Clear client view
-              io.emit('notification', '⚠ Chat history has been cleared by an Admin');
+              io.to(room).emit('history', []); // Clear view in room
+              io.to(room).emit('notification', `⚠ ${room} chat history has been cleared by an Admin`);
           } catch (e) {
               console.error(e);
               socket.emit('notification', 'Error clearing chat');

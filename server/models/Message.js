@@ -13,6 +13,11 @@ const messageSchema = new mongoose.Schema({
     type: String,
     required: false // Can be empty if just uploading a file? Let's say yes.
   },
+  room: {
+    type: String,
+    default: 'General',
+    index: true
+  },
   type: {
     type: String,
     enum: ['text', 'image', 'video', 'audio', 'file'],
