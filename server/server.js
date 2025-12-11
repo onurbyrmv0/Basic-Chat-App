@@ -61,6 +61,32 @@ mongoose.connect(MONGO_URI)
   });
 
 // Routes
+const axios = require('axios');
+const cheerio = require('cheerio');
+
+app.get('/api/url-meta', async (req, res) => {
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: 'URL required' });
+
+    try {
+        const { data } = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } });
+        const $ = cheerio.load(data);
+        
+        const getMeta = (prop) => $(`meta[property="${prop}"]`).attr('content') || $(`meta[name="${prop}"]`).attr('content');
+
+        const meta = {
+            title: getMeta('og:title') || $('title').text() || '',
+            description: getMeta('og:description') || getMeta('description') || '',
+            image: getMeta('og:image') || ''
+        };
+
+        res.json(meta);
+    } catch (err) {
+        console.error('Metadata fetch error:', err.message);
+        res.json({}); // Return empty on failure to prevent frontend break
+    }
+});
+
 app.post('/upload', upload.single('file'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });

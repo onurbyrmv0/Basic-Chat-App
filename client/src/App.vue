@@ -20,6 +20,8 @@ const typingUsers = ref(new Set());
 const onlineUsers = ref([]);
 const replyingTo = ref(null);
 const showMobileMenu = ref(false);
+const searchQuery = ref('');
+const linkPreviews = reactive(new Map()); // url -> meta object
 let typingTimeout = null;
 
 const avatars = [
@@ -54,11 +56,16 @@ const joinChat = () => {
 
   socket.value.on('history', (history) => {
     messages.value = history;
+    // Detect links in history
+    history.forEach(m => {
+        if(m.type === 'text') detectLinks(m.content);
+    });
     scrollToBottom();
   });
 
   socket.value.on('message', (msg) => {
     messages.value.push(msg);
+    detectLinks(msg.content);
     scrollToBottom();
   });
   
@@ -282,6 +289,44 @@ const uploadAudio = async (file) => {
     }
 };
 
+const detectLinks = async (text) => {
+    if (!text) return;
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const matches = text.match(urlRegex);
+    if (matches) {
+        for (const url of matches) {
+            if (!linkPreviews.has(url)) {
+                try {
+                    const { data } = await axios.get(`${BACKEND_URL}/api/url-meta?url=${encodeURIComponent(url)}`);
+                    if (data && data.title) {
+                        linkPreviews.set(url, data);
+                    }
+                } catch (e) {
+                    console.error('Failed to load preview', e);
+                }
+            }
+        }
+    }
+};
+
+const filteredMessages = computed(() => {
+    if (!searchQuery.value) return messages.value;
+    const lower = searchQuery.value.toLowerCase();
+    return messages.value.filter(msg => {
+        if (msg.type === 'text') return msg.content.toLowerCase().includes(lower);
+        return false;
+    });
+});
+
+const getPreview = (text) => {
+    if (!text) return null;
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const match = text.match(urlRegex);
+    if (match) {
+        return linkPreviews.get(match[0]);
+    }
+    return null;
+};
 </script>
 
 <template>
@@ -384,7 +429,18 @@ const uploadAudio = async (file) => {
             </div>
             <div>
                 <h2 class="text-lg font-bold text-white tracking-wide">General Room</h2>
-                <p class="text-xs text-indigo-300 font-medium hidden md:block">Live Chat</p>
+                <div class="flex items-center gap-2">
+                     <p class="text-xs text-indigo-300 font-medium hidden md:block">Live Chat</p>
+                     <div class="relative group">
+                         <input 
+                            v-model="searchQuery" 
+                            type="text" 
+                            placeholder="Search..." 
+                            class="bg-gray-700/50 text-xs text-white px-2 py-1 rounded-full border border-gray-600 focus:outline-none focus:border-indigo-500 w-24 focus:w-40 transition-all pl-7"
+                         >
+                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="absolute left-2 top-1.5 text-gray-400"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                     </div>
+                </div>
             </div>
         </div>
         <div class="flex items-center gap-3 bg-gray-900/50 py-1.5 px-3 rounded-full border border-gray-700/50">
@@ -403,7 +459,7 @@ const uploadAudio = async (file) => {
             <p>No messages yet. Say hello!</p>
         </div>
 
-        <div v-for="(msg, index) in messages" :key="index" class="w-full">
+        <div v-for="(msg, index) in filteredMessages" :key="index" class="w-full">
             
             <!-- Notification -->
             <div v-if="msg.type === 'notification'" class="flex justify-center my-4">
@@ -431,8 +487,21 @@ const uploadAudio = async (file) => {
                     <div :class="['px-5 py-3 md:px-6 md:py-4 rounded-[20px] shadow-sm text-white leading-relaxed relative overflow-hidden text-sm md:text-base transition-all duration-200 hover:shadow-md', 
                         msg.nickname === nickname ? 'bg-indigo-600 rounded-tr-sm' : 'bg-gray-700 rounded-tl-sm']">
                         
-                        <!-- Text -->
-                        <p v-if="msg.type === 'text'" class="break-words whitespace-pre-wrap font-medium">{{ msg.content }}</p>
+                        <!-- Text with Link Preview -->
+                        <div v-if="msg.type === 'text'">
+                             <p class="break-words whitespace-pre-wrap font-medium">{{ msg.content }}</p>
+                             
+                             <!-- Link Preview Check -->
+                             <div v-if="getPreview(msg.content)" class="mt-2 bg-gray-800/80 rounded-lg overflow-hidden border border-gray-600/50 hover:border-indigo-500/50 transition-colors max-w-sm">
+                                 <a :href="getPreview(msg.content).url || msg.content.match(/(https?:\/\/[^\s]+)/)[0]" target="_blank" class="block group/card"> 
+                                     <img v-if="getPreview(msg.content).image" :src="getPreview(msg.content).image" class="w-full h-32 object-cover opacity-80 group-hover/card:opacity-100 transition-opacity">
+                                     <div class="p-2">
+                                         <h4 class="font-bold text-xs text-gray-200 truncate group-hover/card:text-indigo-300">{{ getPreview(msg.content).title }}</h4>
+                                         <p class="text-[10px] text-gray-400 line-clamp-2 mt-0.5">{{ getPreview(msg.content).description }}</p>
+                                     </div>
+                                 </a>
+                             </div>
+                        </div>
                         
                         <!-- Image -->
                         <img v-else-if="msg.type === 'image'" :src="msg.fileUrl" @load="scrollToBottom" class="rounded-xl max-h-72 object-cover border border-black/20 hover:scale-[1.01] transition-transform cursor-pointer bg-black/20">
