@@ -69,28 +69,34 @@ mongoose.connect(MONGO_URI)
 
 // REGISTER
 app.post('/api/auth/register', async (req, res) => {
+    console.log('🔹 register request:', req.body);
     try {
-        const { nickname, password, avatar } = req.body;
+        let { nickname, password, avatar } = req.body;
         
         // Validation
         if (!nickname || !password || password.length < 4) {
             return res.status(400).json({ error: 'Nickname and password (min 4 chars) required.' });
         }
 
-        const existingUser = await User.findOne({ nickname });
+        nickname = nickname.trim(); // TRIM INPUT
+
+        // Case-insensitive check
+        const existingUser = await User.findOne({ nickname: { $regex: new RegExp(`^${nickname}$`, 'i') } });
         if (existingUser) {
+            console.log('⚠️ Nickname taken:', nickname);
             return res.status(400).json({ error: 'Nickname already exists.' });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
         
         const newUser = new User({
-            nickname,
+            nickname, // We save the trimmed, original casing (or we could lowercase it)
             password: hashedPassword,
             avatar: avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${nickname}`
         });
 
         await newUser.save();
+        console.log('✅ User registered:', newUser.nickname);
 
         res.status(201).json({ 
             message: 'User registered successfully',
@@ -98,29 +104,42 @@ app.post('/api/auth/register', async (req, res) => {
         });
 
     } catch (err) {
-        console.error('Registration Error:', err);
+        console.error('❌ Registration Error:', err);
         res.status(500).json({ error: 'Server error during registration.' });
     }
 });
 
 // LOGIN
 app.post('/api/auth/login', async (req, res) => {
+    console.log('🔹 login request:', req.body);
     try {
-        const { nickname, password } = req.body;
+        let { nickname, password } = req.body;
 
-        const user = await User.findOne({ nickname });
-        if (!user) return res.status(400).json({ error: 'User not found.' });
+        if(!nickname || !password) return res.status(400).json({ error: 'Missing fields' });
+
+        nickname = nickname.trim();
+
+        // Case-insensitive find
+        const user = await User.findOne({ nickname: { $regex: new RegExp(`^${nickname}$`, 'i') } });
+        if (!user) {
+            console.log('⚠️ Login failed: User not found for:', nickname);
+            return res.status(400).json({ error: 'User not found.' });
+        }
 
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(400).json({ error: 'Invalid credentials.' });
+        if (!isMatch) {
+            console.log('⚠️ Login failed: Invalid password for:', nickname);
+            return res.status(400).json({ error: 'Invalid credentials.' });
+        }
 
+        console.log('✅ User logged in:', user.nickname);
         res.json({ 
             message: 'Login successful',
             user: { nickname: user.nickname, avatar: user.avatar, _id: user._id }
         });
 
     } catch (err) {
-        console.error('Login Error:', err);
+        console.error('❌ Login Error:', err);
         res.status(500).json({ error: 'Server error during login.' });
     }
 });
