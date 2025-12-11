@@ -19,6 +19,7 @@ const audioChunks = ref([]);
 const typingUsers = ref(new Set());
 const onlineUsers = ref([]);
 const replyingTo = ref(null);
+const showMobileMenu = ref(false);
 let typingTimeout = null;
 
 const avatars = [
@@ -331,13 +332,24 @@ const uploadAudio = async (file) => {
     <!-- Chat Screen -->
     <div v-else class="flex w-full md:max-w-6xl h-full md:h-[90vh] gap-4">
         
-        <!-- Online Users Sidebar (Desktop) -->
-        <aside class="hidden md:flex flex-col w-64 bg-gray-800 rounded-3xl shadow-2xl border border-gray-700 overflow-hidden">
-            <div class="p-4 border-b border-gray-700 bg-gray-800/95 backdrop-blur-md">
+        <!-- Online Users Sidebar (Desktop & Mobile Drawer) -->
+        <div 
+            class="fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity" 
+            v-if="showMobileMenu" 
+            @click="showMobileMenu = false"
+        ></div>
+
+        <aside 
+            :class="['fixed md:relative top-0 left-0 h-full md:h-auto w-64 bg-gray-800 md:rounded-3xl shadow-2xl border-r md:border border-gray-700 overflow-hidden z-50 transition-transform duration-300 transform', showMobileMenu ? 'translate-x-0' : '-translate-x-full md:translate-x-0']"
+        >
+            <div class="p-4 border-b border-gray-700 bg-gray-800/95 backdrop-blur-md flex justify-between items-center">
                 <h3 class="font-bold text-gray-200 flex items-center gap-2">
                     <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    Online Users ({{ onlineUsers.length }})
+                    Online ({{ onlineUsers.length }})
                 </h3>
+                <button @click="showMobileMenu = false" class="md:hidden text-gray-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
             </div>
             <div class="flex-1 overflow-y-auto p-3 space-y-2">
                 <div v-for="user in onlineUsers" :key="user.nickname" class="flex items-center gap-3 p-2 hover:bg-gray-700/50 rounded-xl transition-colors cursor-default">
@@ -359,6 +371,11 @@ const uploadAudio = async (file) => {
       <!-- Header -->
       <header class="bg-gray-800/95 backdrop-blur-md p-4 border-b border-gray-700 flex justify-between items-center px-4 md:px-8 z-10 sticky top-0">
         <div class="flex items-center gap-4">
+            <!-- Mobile Menu Toggle -->
+            <button @click="showMobileMenu = true" class="md:hidden text-gray-400 hover:text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            </button>
+
             <div class="relative">
                 <span class="absolute right-0 bottom-0 block h-3 w-3 rounded-full ring-2 ring-gray-800 bg-green-500 animate-pulse"></span>
                 <div class="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400">
@@ -367,7 +384,7 @@ const uploadAudio = async (file) => {
             </div>
             <div>
                 <h2 class="text-lg font-bold text-white tracking-wide">General Room</h2>
-                <p class="text-xs text-indigo-300 font-medium">Live Chat</p>
+                <p class="text-xs text-indigo-300 font-medium hidden md:block">Live Chat</p>
             </div>
         </div>
         <div class="flex items-center gap-3 bg-gray-900/50 py-1.5 px-3 rounded-full border border-gray-700/50">
@@ -431,7 +448,8 @@ const uploadAudio = async (file) => {
                     </div>
                     
                     <!-- Reply Action -->
-                     <button @click="setReply(msg)" class="opacity-0 group-hover:opacity-100 transition-opacity absolute top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-white bg-gray-800/80 rounded-full shadow-md" :class="msg.nickname === nickname ? '-left-12' : '-right-12'" title="Reply">
+                    <!-- Reply Action (Always visible on mobile, hover on desktop) -->
+                     <button @click="setReply(msg)" class="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity absolute top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-white bg-gray-800/90 rounded-full shadow-md z-10" :class="msg.nickname === nickname ? '-left-10 md:-left-12' : '-right-10 md:-right-12'" title="Reply">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
                     </button>
                     
