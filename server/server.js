@@ -9,6 +9,7 @@ const Message = require('./models/Message');
 require('dotenv').config();
 
 const app = express();
+app.enable('trust proxy'); // Fix for Mixed Content (HTTPS) behind Nginx
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
