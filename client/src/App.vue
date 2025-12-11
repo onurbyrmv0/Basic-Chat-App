@@ -15,8 +15,6 @@ const socket = ref(null);
 const connectionError = ref(false);
 const isRecording = ref(false);
 const mediaRecorder = ref(null);
-const isRecording = ref(false);
-const mediaRecorder = ref(null);
 const audioChunks = ref([]);
 const typingUsers = ref(new Set());
 const onlineUsers = ref([]);
@@ -97,7 +95,6 @@ const sendMessage = () => {
     } : null
   };
 
-  socket.value.emit('sendMessage', msgData);
   socket.value.emit('sendMessage', msgData);
   newMessage.value = '';
   replyingTo.value = null; // Clear reply state
