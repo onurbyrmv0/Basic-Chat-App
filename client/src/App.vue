@@ -285,7 +285,7 @@ const uploadAudio = async (file) => {
 </script>
 
 <template>
-  <div class="h-screen w-full bg-gray-900 text-gray-100 font-sans flex items-center justify-center p-0 md:p-4 overflow-hidden">
+  <div class="h-screen md:h-screen w-full bg-gray-900 text-gray-100 font-sans flex items-center justify-center p-0 md:p-4 overflow-hidden" style="height: 100dvh;">
     
     <!-- Login Screen -->
     <div v-if="!joined" class="bg-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-700 mx-4 z-50">
