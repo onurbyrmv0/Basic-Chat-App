@@ -75,6 +75,8 @@ app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, '../client/dist/index.html'));
 });
 
+const onlineUsers = new Map(); // socket.id -> { nickname, avatar }
+
 // Socket.io Logic
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
@@ -97,8 +99,21 @@ io.on('connection', (socket) => {
 
   socket.on('join', (userData) => {
     console.log(`User joined: ${userData.nickname}`);
+    onlineUsers.set(socket.id, userData);
+    
     socket.join('General'); 
     io.to('General').emit('notification', `${userData.nickname} joined the chat`);
+    io.to('General').emit('updateUserList', Array.from(onlineUsers.values()));
+  });
+
+  socket.on('typing', () => {
+      const user = onlineUsers.get(socket.id);
+      if (user) socket.to('General').emit('userTyping', user.nickname);
+  });
+
+  socket.on('stopTyping', () => {
+      const user = onlineUsers.get(socket.id);
+      if (user) socket.to('General').emit('userStopTyping', user.nickname);
   });
 
   socket.on('sendMessage', async (data) => {
@@ -130,6 +145,12 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
+    const user = onlineUsers.get(socket.id);
+    if (user) {
+        onlineUsers.delete(socket.id);
+        io.to('General').emit('notification', `${user.nickname} left the chat`);
+        io.to('General').emit('updateUserList', Array.from(onlineUsers.values()));
+    }
   });
   
   // Admin Features

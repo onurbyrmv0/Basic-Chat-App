@@ -15,7 +15,13 @@ const socket = ref(null);
 const connectionError = ref(false);
 const isRecording = ref(false);
 const mediaRecorder = ref(null);
+const isRecording = ref(false);
+const mediaRecorder = ref(null);
 const audioChunks = ref([]);
+const typingUsers = ref(new Set());
+const onlineUsers = ref([]);
+const replyingTo = ref(null);
+let typingTimeout = null;
 
 const avatars = [
   'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
@@ -61,6 +67,19 @@ const joinChat = () => {
       messages.value.push({ type: 'notification', content: text, timestamp: new Date() });
       scrollToBottom();
   });
+
+  socket.value.on('updateUserList', (users) => {
+      onlineUsers.value = users;
+  });
+
+  socket.value.on('userTyping', (userNickname) => {
+      typingUsers.value.add(userNickname);
+      scrollToBottom();
+  });
+
+  socket.value.on('userStopTyping', (userNickname) => {
+      typingUsers.value.delete(userNickname);
+  });
 };
 
 const sendMessage = () => {
@@ -70,11 +89,45 @@ const sendMessage = () => {
     nickname: nickname.value,
     avatar: avatar.value,
     content: newMessage.value,
-    type: 'text'
+    type: 'text',
+    replyTo: replyingTo.value ? {
+        id: replyingTo.value._id,
+        nickname: replyingTo.value.nickname,
+        content: replyingTo.value.type === 'text' ? replyingTo.value.content : `[${replyingTo.value.type}]`
+    } : null
   };
 
   socket.value.emit('sendMessage', msgData);
+  socket.value.emit('sendMessage', msgData);
   newMessage.value = '';
+  replyingTo.value = null; // Clear reply state
+  stopTyping(); // Clear typing status
+};
+
+const handleTyping = () => {
+    socket.value.emit('typing');
+    if (typingTimeout) clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+        socket.value.emit('stopTyping');
+    }, 2000);
+};
+
+const stopTyping = () => {
+    if (typingTimeout) clearTimeout(typingTimeout);
+    socket.value.emit('stopTyping');
+};
+
+const setReply = (msg) => {
+    replyingTo.value = msg;
+    nextTick(() => {
+        // Focus input
+        const textarea = document.querySelector('textarea');
+        if(textarea) textarea.focus();
+    });
+};
+
+const cancelReply = () => {
+    replyingTo.value = null;
 };
 
 const handleFileUpload = async (event) => {
@@ -175,7 +228,6 @@ const startRecording = async () => {
     };
 
     mediaRecorder.value.start();
-    isRecording.value = true;
   } catch (err) {
     console.error('Error accessing microphone:', err);
     alert('Microphone access denied or not supported.');
@@ -238,7 +290,7 @@ const uploadAudio = async (file) => {
   <div class="h-screen w-full bg-gray-900 text-gray-100 font-sans flex items-center justify-center p-0 md:p-4 overflow-hidden">
     
     <!-- Login Screen -->
-    <div v-if="!joined" class="bg-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-700 mx-4">
+    <div v-if="!joined" class="bg-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-700 mx-4 z-50">
       <h1 class="text-4xl font-extrabold mb-8 text-center text-indigo-400 tracking-tight">Welcome</h1>
       
       <div class="mb-6">
@@ -280,7 +332,29 @@ const uploadAudio = async (file) => {
     </div>
 
     <!-- Chat Screen -->
-    <div v-else class="flex flex-col w-full md:max-w-5xl h-full md:h-[90vh] bg-gray-800 md:rounded-3xl shadow-2xl overflow-hidden border-0 md:border border-gray-700 relative">
+    <div v-else class="flex w-full md:max-w-6xl h-full md:h-[90vh] gap-4">
+        
+        <!-- Online Users Sidebar (Desktop) -->
+        <aside class="hidden md:flex flex-col w-64 bg-gray-800 rounded-3xl shadow-2xl border border-gray-700 overflow-hidden">
+            <div class="p-4 border-b border-gray-700 bg-gray-800/95 backdrop-blur-md">
+                <h3 class="font-bold text-gray-200 flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                    Online Users ({{ onlineUsers.length }})
+                </h3>
+            </div>
+            <div class="flex-1 overflow-y-auto p-3 space-y-2">
+                <div v-for="user in onlineUsers" :key="user.nickname" class="flex items-center gap-3 p-2 hover:bg-gray-700/50 rounded-xl transition-colors cursor-default">
+                    <div class="relative">
+                        <img :src="user.avatar" class="w-8 h-8 rounded-full bg-gray-700 border border-gray-600">
+                        <span class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-gray-800 rounded-full"></span>
+                    </div>
+                    <span class="text-sm font-medium text-gray-300 truncate">{{ user.nickname }}</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <div class="flex flex-col flex-1 bg-gray-800 md:rounded-3xl shadow-2xl overflow-hidden border-0 md:border border-gray-700 relative">
       
       <!-- Background Pattern -->
       <div class="absolute inset-0 opacity-5 pointer-events-none" style="background-image: radial-gradient(#6366f1 1px, transparent 1px); background-size: 24px 24px;"></div>
@@ -323,10 +397,18 @@ const uploadAudio = async (file) => {
             </div>
 
             <!-- User Message -->
-            <div v-else :class="['flex gap-3 md:gap-4 group animate-fade-in-up', msg.nickname === nickname ? 'flex-row-reverse' : 'flex-row']">
+            <div v-else :class="['flex gap-3 md:gap-4 group animate-fade-in-up relative', msg.nickname === nickname ? 'flex-row-reverse' : 'flex-row']">
                 <img :src="msg.avatar" class="w-8 h-8 md:w-10 md:h-10 rounded-full shadow-md mt-1 bg-gray-800 object-cover border-2 border-gray-700 flex-shrink-0">
                 
                 <div :class="['max-w-[85%] md:max-w-[70%] flex flex-col', msg.nickname === nickname ? 'items-end' : 'items-start']">
+                    
+                    <!-- Reply Context -->
+                    <div v-if="msg.replyTo" class="mb-1 text-xs text-gray-400 flex items-center gap-1 opacity-75 hover:opacity-100 transition-opacity cursor-pointer" @click="/* Scroll to message logic could go here */">
+                        <span class="bg-gray-700/50 px-2 py-1 rounded-lg border-l-2 border-indigo-500 line-clamp-1">
+                            Replying to <span class="font-bold text-indigo-300">{{ msg.replyTo.nickname }}</span>: {{ msg.replyTo.content }}
+                        </span>
+                    </div>
+
                     <div class="flex items-baseline gap-2 mb-1 px-1">
                         <span class="text-xs md:text-sm font-bold text-gray-400 group-hover:text-gray-300 transition-colors">{{ msg.nickname }}</span>
                         <span class="text-[10px] md:text-xs text-gray-600">{{ formatTime(msg.timestamp) }}</span>
@@ -350,10 +432,37 @@ const uploadAudio = async (file) => {
                             <audio controls :src="msg.fileUrl" class="w-full h-8"></audio>
                         </div>
                     </div>
+                    
+                    <!-- Reply Action -->
+                     <button @click="setReply(msg)" class="opacity-0 group-hover:opacity-100 transition-opacity absolute top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-white bg-gray-800/80 rounded-full shadow-md" :class="msg.nickname === nickname ? '-left-12' : '-right-12'" title="Reply">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
+                    </button>
+                    
                 </div>
             </div>
         </div>
+
+         <!-- Typing Indicator -->
+         <div v-if="typingUsers.size > 0" class="flex items-center gap-2 px-4 py-2 text-xs font-medium text-gray-400 animate-pulse">
+            <div class="flex gap-1">
+                <span class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+                <span class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+                <span class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+            </div>
+            <span>{{ Array.from(typingUsers).join(', ') }} is typing...</span>
+        </div>
       </main>
+
+      <!-- Reply Preview -->
+      <div v-if="replyingTo" class="bg-gray-800/95 backdrop-blur-md px-4 py-2 border-t border-gray-700 flex justify-between items-center animate-fade-in-up">
+           <div class="flex flex-col text-sm border-l-4 border-indigo-500 pl-3">
+               <span class="text-indigo-400 font-bold text-xs">Replying to {{ replyingTo.nickname }}</span>
+               <span class="text-gray-300 truncate max-w-xs md:max-w-md">{{ replyingTo.type === 'text' ? replyingTo.content : `[${replyingTo.type}]` }}</span>
+           </div>
+           <button @click="cancelReply" class="p-1 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white">
+               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+           </button>
+      </div>
 
       <!-- Input Area -->
       <footer class="bg-gray-800/95 backdrop-blur-md p-4 border-t border-gray-700 z-10 relative">
@@ -393,6 +502,7 @@ const uploadAudio = async (file) => {
                 <textarea 
                     v-model="newMessage" 
                     @keydown.enter.exact.prevent="sendMessage"
+                    @input="handleTyping"
                     placeholder="Type a message..." 
                     class="w-full bg-transparent text-white px-5 py-3.5 focus:outline-none resize-none h-[52px] max-h-[140px] text-sm md:text-base placeholder-gray-500"
                     style="min-height: 52px;"
