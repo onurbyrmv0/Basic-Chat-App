@@ -36,6 +36,7 @@ const newRoomPassword = ref('');
 const roomToJoin = ref(null);
 const roomJoinPassword = ref('');
 const joinedRooms = ref(new Set(['General'])); // Track rooms we have unlocked this session
+const currentUserId = ref(''); // Store logged-in user ID
 
 const avatars = [
   'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
@@ -69,6 +70,7 @@ const handleAuth = async () => {
         const user = res.data.user;
         nickname.value = user.nickname;
         avatar.value = user.avatar;
+        currentUserId.value = user._id; // Store ID for room creation
         
         // Connect to Chat
         joinChat();
@@ -128,6 +130,13 @@ const joinChat = () => {
 
   socket.value.on('userStopTyping', (userNickname) => {
       typingUsers.value.delete(userNickname);
+  });
+
+  socket.value.on('roomCreated', (newRoom) => {
+      // Add if not exists
+      if (!rooms.value.find(r => r._id === newRoom._id)) {
+          rooms.value.push(newRoom);
+      }
   });
 };
 
@@ -241,7 +250,7 @@ const handleCreateRoom = async () => {
         await axios.post(`${BACKEND_URL}/api/rooms`, {
             name: newRoomName.value,
             password: newRoomPassword.value, // Hashed on server
-            userId: 'temp_id' // You'd normally send user ID here if available in state, but simpler for now
+            userId: currentUserId.value // Use actual user ID
         });
         
         // Reset and refresh
@@ -535,7 +544,7 @@ const getPreview = (text) => {
     </div>
 
     <!-- Chat Screen -->
-    <div v-else class="flex w-full md:max-w-6xl h-full md:h-[90vh] gap-4">
+    <div v-else-if="joined" class="flex w-full md:max-w-6xl h-full md:h-[90vh] gap-4">
         
         <!-- Online Users Sidebar (Desktop & Mobile Drawer) -->
         <div 

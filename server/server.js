@@ -163,6 +163,7 @@ app.post('/api/rooms', async (req, res) => {
         });
 
         await newRoom.save();
+        io.emit('roomCreated', newRoom); // Broadcast to all
         res.status(201).json(newRoom);
 
     } catch (err) {
