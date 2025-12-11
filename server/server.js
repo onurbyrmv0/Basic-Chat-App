@@ -92,7 +92,9 @@ app.post('/upload', upload.single('file'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
-  const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+  // Use relative path to avoid Mixed Content issues (http vs https)
+  // The frontend or Nginx will handle the domain/protocol resolution
+  const fileUrl = `/uploads/${req.file.filename}`;
   res.json({ url: fileUrl, type: req.file.mimetype });
 });
 

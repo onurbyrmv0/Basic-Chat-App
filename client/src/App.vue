@@ -33,7 +33,8 @@ const avatars = [
 ];
 
 // Backend URL (dynamic for production)
-const BACKEND_URL = import.meta.env.PROD ? '' : 'http://localhost:3000';
+// Backend URL (dynamic for production)
+const BACKEND_URL = ''; // Always standard relative path (proxy handles it in both dev and prod)
 
 const joinChat = () => {
   if (!nickname.value.trim()) return;
