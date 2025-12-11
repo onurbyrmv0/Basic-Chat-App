@@ -175,15 +175,15 @@ app.post('/api/rooms', async (req, res) => {
 // VERIFY ROOM PASSWORD
 app.post('/api/rooms/verify', async (req, res) => {
     try {
-        const { roomId, password } = req.body;
-        const room = await Room.findById(roomId);
+        const { name, password } = req.body;
+        const room = await Room.findOne({ name });
         
         if (!room) return res.status(404).json({ error: 'Room not found' });
 
         const isMatch = await bcrypt.compare(password, room.password);
         if (!isMatch) return res.status(400).json({ error: 'Invalid password' });
 
-        res.json({ success: true, name: room.name });
+        res.json({ success: true, name: room.name, _id: room._id });
 
     } catch (err) {
         console.error('Verify Room Error:', err);

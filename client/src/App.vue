@@ -30,9 +30,12 @@ let typingTimeout = null;
 const rooms = ref([]);
 const currentRoom = ref('General');
 const showCreateRoomModal = ref(false);
-const showPasswordModal = ref(false);
+const showPasswordModal = ref(false); // For joining from link/list (kept for backward compat or direct links)
+const showConnectRoomModal = ref(false); // New: For "Connect by Name"
 const newRoomName = ref('');
 const newRoomPassword = ref('');
+const connectRoomName = ref('');
+const connectRoomPassword = ref('');
 const roomToJoin = ref(null);
 const roomJoinPassword = ref('');
 const joinedRooms = ref(new Set(['General'])); // Track rooms we have unlocked this session
@@ -92,7 +95,7 @@ const joinChat = () => {
     connectionError.value = false;
     joined.value = true;
     socket.value.emit('join', { nickname: nickname.value, avatar: avatar.value, room: currentRoom.value }); 
-    fetchRooms();
+    // fetchRooms(); // REMOVED: Hidden rooms
   });
 
   socket.value.on('connect_error', () => {
@@ -232,14 +235,7 @@ const scrollToBottom = async () => {
 };
 
 // ROOM LOGIC
-const fetchRooms = async () => {
-    try {
-        const res = await axios.get(`${BACKEND_URL}/api/rooms`);
-        rooms.value = res.data;
-    } catch (e) {
-        console.error('Error fetching rooms', e);
-    }
-}
+// fetchRooms removed for hidden rooms logic
 
 const handleCreateRoom = async () => {
     if (!newRoomName.value.trim() || !newRoomPassword.value.trim()) {
@@ -257,8 +253,10 @@ const handleCreateRoom = async () => {
         newRoomName.value = '';
         newRoomPassword.value = '';
         showCreateRoomModal.value = false;
-        fetchRooms();
-        alert('Room created!');
+        
+        // Add to my rooms immediately
+        // fetchRooms(); // Removed
+        // Server emits 'roomCreated' but we might want to auto-join or just add to list
     } catch (e) {
         alert(e.response?.data?.error || 'Error creating room');
     }
@@ -274,6 +272,35 @@ const initiateJoinRoom = (roomName) => {
     }
 }
 
+const handleConnectRoom = async () => {
+    if (!connectRoomName.value.trim() || !connectRoomPassword.value.trim()) return;
+
+    try {
+        const res = await axios.post(`${BACKEND_URL}/api/rooms/verify`, {
+            name: connectRoomName.value,
+            password: connectRoomPassword.value
+        });
+        
+        // Success
+        const room = { _id: res.data._id, name: res.data.name };
+        
+        // Add to active rooms if not present
+        if (!rooms.value.find(r => r.name === room.name)) {
+            rooms.value.push(room);
+        }
+        
+        joinedRooms.value.add(room.name);
+        showConnectRoomModal.value = false;
+        connectRoomName.value = '';
+        connectRoomPassword.value = '';
+        switchToRoom(room.name);
+        
+    } catch (e) {
+        alert(e.response?.data?.error || 'Failed to connect');
+    }
+}
+
+// Deprecated or Modified: verifyAndJoinRoom for existing list actions
 const verifyAndJoinRoom = async () => {
     if (!roomJoinPassword.value) return;
     
@@ -517,6 +544,19 @@ const getPreview = (text) => {
       </p>
     </div>
 
+    <!-- CONNECT ROOM MODAL -->
+    <div v-if="showConnectRoomModal" class="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
+        <div class="bg-gray-800 p-6 rounded-2xl w-full max-w-sm border border-gray-700 shadow-2xl">
+            <h3 class="text-xl font-bold mb-4 text-white">Connect to Room</h3>
+            <input v-model="connectRoomName" placeholder="Room Name" class="w-full mb-3 bg-gray-700 p-3 rounded text-white focus:ring-2 focus:ring-indigo-500 outline-none">
+            <input v-model="connectRoomPassword" type="password" placeholder="Password" class="w-full mb-4 bg-gray-700 p-3 rounded text-white focus:ring-2 focus:ring-indigo-500 outline-none" @keyup.enter="handleConnectRoom">
+            <div class="flex gap-2">
+                <button @click="showConnectRoomModal = false" class="flex-1 py-2 bg-gray-600 rounded hover:bg-gray-500 text-white">Cancel</button>
+                <button @click="handleConnectRoom" class="flex-1 py-2 bg-green-600 rounded hover:bg-green-500 text-white font-bold">Connect</button>
+            </div>
+        </div>
+    </div>
+
     <!-- CREATE ROOM MODAL -->
     <div v-if="showCreateRoomModal" class="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
         <div class="bg-gray-800 p-6 rounded-2xl w-full max-w-sm border border-gray-700 shadow-2xl">
@@ -580,7 +620,12 @@ const getPreview = (text) => {
                 <!-- ROOMS LIST -->
                 <div class="p-4 border-b border-gray-700 bg-gray-800/95 backdrop-blur-md sticky top-0 z-10 flex justify-between items-center">
                     <h3 class="font-bold text-gray-200">Rooms</h3>
-                    <button @click="showCreateRoomModal = true" class="text-xs bg-indigo-600 px-2 py-1 rounded hover:bg-indigo-500 text-white font-bold" title="Create Private Room">+</button>
+                    <div class="flex gap-1">
+                        <button @click="showConnectRoomModal = true" class="text-xs bg-gray-600 px-2 py-1 rounded hover:bg-gray-500 text-white font-bold flex items-center gap-1" title="Connect to Room">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                        </button>
+                        <button @click="showCreateRoomModal = true" class="text-xs bg-indigo-600 px-2 py-1 rounded hover:bg-indigo-500 text-white font-bold" title="Create Private Room">+</button>
+                    </div>
                 </div>
                 <div class="p-3 space-y-2 overflow-y-auto flex-1">
                      <!-- General -->
