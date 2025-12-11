@@ -21,7 +21,10 @@ const onlineUsers = ref([]);
 const replyingTo = ref(null);
 const showMobileMenu = ref(false);
 const searchQuery = ref('');
+const searchQuery = ref('');
 const linkPreviews = reactive(new Map()); // url -> meta object
+const password = ref('');
+const isLoginMode = ref(true); // Toggle between Login and Register
 let typingTimeout = null;
 
 const avatars = [
@@ -36,19 +39,49 @@ const avatars = [
 // Backend URL (dynamic for production)
 const BACKEND_URL = ''; // Always standard relative path (proxy handles it in both dev and prod)
 
+const handleAuth = async () => {
+    if (!nickname.value.trim() || !password.value.trim()) {
+        alert('Please enter nickname and password');
+        return;
+    }
+
+    try {
+        const endpoint = isLoginMode.value ? '/api/auth/login' : '/api/auth/register';
+        const payload = {
+            nickname: nickname.value,
+            password: password.value,
+            avatar: isLoginMode.value ? undefined : avatar.value
+        };
+
+        const res = await axios.post(`${BACKEND_URL}${endpoint}`, payload);
+        
+        // Success
+        const user = res.data.user;
+        nickname.value = user.nickname;
+        avatar.value = user.avatar;
+        
+        // Connect to Chat
+        joinChat();
+
+    } catch (err) {
+        console.error('Auth Error:', err);
+        alert(err.response?.data?.error || 'Authentication failed');
+    }
+};
+
 const joinChat = () => {
-  if (!nickname.value.trim()) return;
-  
   // Connect to Socket.io
   socket.value = io(BACKEND_URL, {
-    transports: ['websocket', 'polling'], // Try websocket first, fallback to polling
+    transports: ['websocket', 'polling'], 
     withCredentials: false
   });
+  // ... socket setup continues ...
+
 
   socket.value.on('connect', () => {
     connectionError.value = false;
     joined.value = true;
-    socket.value.emit('join', { nickname: nickname.value, avatar: avatar.value });
+    socket.value.emit('join', { nickname: nickname.value, avatar: avatar.value }); // Send actual avatar from DB if needed
   });
 
   socket.value.on('connect_error', () => {
@@ -340,18 +373,29 @@ const getPreview = (text) => {
     <div v-if="!joined" class="bg-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-700 mx-4 z-50">
       <h1 class="text-4xl font-extrabold mb-8 text-center text-indigo-400 tracking-tight">Welcome</h1>
       
-      <div class="mb-6">
-        <label class="block text-sm font-semibold mb-2 text-gray-300 uppercase tracking-wide">Nickname</label>
-        <input 
-          v-model="nickname" 
-          @keyup.enter="joinChat"
-          type="text" 
-          class="w-full bg-gray-900/50 text-white rounded-xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600 focus:border-indigo-500 placeholder-gray-500 transition-all"
-          placeholder="Who are you?"
-        >
+      <div class="mb-6 space-y-4">
+        <div>
+            <label class="block text-sm font-semibold mb-2 text-gray-300 uppercase tracking-wide">Nickname</label>
+            <input 
+              v-model="nickname" 
+              type="text" 
+              class="w-full bg-gray-900/50 text-white rounded-xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600 focus:border-indigo-500 placeholder-gray-500 transition-all"
+              placeholder="Username"
+            >
+        </div>
+        <div>
+            <label class="block text-sm font-semibold mb-2 text-gray-300 uppercase tracking-wide">Password</label>
+            <input 
+              v-model="password" 
+              @keyup.enter="handleAuth"
+              type="password" 
+              class="w-full bg-gray-900/50 text-white rounded-xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600 focus:border-indigo-500 placeholder-gray-500 transition-all"
+              placeholder="••••••••"
+            >
+        </div>
       </div>
 
-      <div class="mb-8">
+      <div class="mb-8" v-if="!isLoginMode">
         <label class="block text-sm font-semibold mb-3 text-gray-300 uppercase tracking-wide">Select Avatar</label>
         <div class="flex flex-wrap gap-3 justify-center bg-gray-900/30 p-4 rounded-xl border border-gray-700/50">
           <img 
@@ -367,11 +411,17 @@ const getPreview = (text) => {
       </div>
 
       <button 
-        @click="joinChat" 
+        @click="handleAuth" 
         class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold py-4 px-6 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/40 transform hover:-translate-y-1 active:scale-95 text-lg"
       >
-        Join Room
+        {{ isLoginMode ? 'Login' : 'Join Room' }}
       </button>
+
+      <div class="mt-4 text-center">
+          <button @click="isLoginMode = !isLoginMode" class="text-sm text-indigo-400 hover:text-indigo-300 underline">
+              {{ isLoginMode ? 'Need an account? Sign Up' : 'Already have an account? Login' }}
+          </button>
+      </div>
 
       <p v-if="connectionError" class="mt-4 text-red-400 text-center text-sm font-medium animate-pulse">
         Waiting for server connection...

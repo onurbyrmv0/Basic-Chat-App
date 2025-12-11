@@ -6,6 +6,10 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const Message = require('./models/Message');
+const User = require('./models/User');
+const bcrypt = require('bcryptjs');
+const axios = require('axios');
+const cheerio = require('cheerio');
 require('dotenv').config();
 
 const app = express();
@@ -61,9 +65,67 @@ mongoose.connect(MONGO_URI)
       mongoConnected = false;
   });
 
-// Routes
-const axios = require('axios');
-const cheerio = require('cheerio');
+// ---------------- AUTH ROUTES ----------------
+
+// REGISTER
+app.post('/api/auth/register', async (req, res) => {
+    try {
+        const { nickname, password, avatar } = req.body;
+        
+        // Validation
+        if (!nickname || !password || password.length < 4) {
+            return res.status(400).json({ error: 'Nickname and password (min 4 chars) required.' });
+        }
+
+        const existingUser = await User.findOne({ nickname });
+        if (existingUser) {
+            return res.status(400).json({ error: 'Nickname already exists.' });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        const newUser = new User({
+            nickname,
+            password: hashedPassword,
+            avatar: avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${nickname}`
+        });
+
+        await newUser.save();
+
+        res.status(201).json({ 
+            message: 'User registered successfully',
+            user: { nickname: newUser.nickname, avatar: newUser.avatar, _id: newUser._id } 
+        });
+
+    } catch (err) {
+        console.error('Registration Error:', err);
+        res.status(500).json({ error: 'Server error during registration.' });
+    }
+});
+
+// LOGIN
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { nickname, password } = req.body;
+
+        const user = await User.findOne({ nickname });
+        if (!user) return res.status(400).json({ error: 'User not found.' });
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) return res.status(400).json({ error: 'Invalid credentials.' });
+
+        res.json({ 
+            message: 'Login successful',
+            user: { nickname: user.nickname, avatar: user.avatar, _id: user._id }
+        });
+
+    } catch (err) {
+        console.error('Login Error:', err);
+        res.status(500).json({ error: 'Server error during login.' });
+    }
+});
+
+// ---------------- API ROUTES ----------------
 
 app.get('/api/url-meta', async (req, res) => {
     const { url } = req.query;
@@ -98,15 +160,14 @@ app.post('/upload', upload.single('file'), (req, res) => {
   res.json({ url: fileUrl, type: req.file.mimetype });
 });
 
-// Catch-all route to serve index.html for Vue Router
-// Catch-all route to serve index.html for Vue Router
+// Catch-all route to serve index.html for Vue Router (SPA)
 app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, '../client/dist/index.html'));
 });
 
 const onlineUsers = new Map(); // socket.id -> { nickname, avatar }
 
-// Socket.io Logic
+// ---------------- SOCKET.IO LOGIC ----------------
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
@@ -148,9 +209,6 @@ io.on('connection', (socket) => {
   socket.on('sendMessage', async (data) => {
     console.log('Received message:', data);
     
-    // AI INTEGRATION POINT: 
-    // const analysis = await analyzeWithGemini(data.content);
-
     try {
       const msgPayload = {
           ...data,
@@ -160,10 +218,8 @@ io.on('connection', (socket) => {
       if (mongoConnected) {
           const newMessage = new Message(data);
           await newMessage.save();
-          // Mongoose adds _id and correct timestamp, so emit that
           io.to('General').emit('message', newMessage);
       } else {
-          // Fallback
           messageMemoryStore.push(msgPayload);
           io.to('General').emit('message', msgPayload);
       }
@@ -206,6 +262,6 @@ io.on('connection', (socket) => {
 });
 
 const PORT = 3000;
-server.listen(PORT, '0.0.0.0', () => { // Listen on all interfaces
+server.listen(PORT, '0.0.0.0', () => { 
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
