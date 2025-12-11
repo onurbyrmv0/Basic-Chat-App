@@ -108,7 +108,7 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         const { nickname, password } = req.body;
 
-        const user = await User.findOne({ nickname });
+        const user = await User.findOne({ nickname }).populate('joinedRooms', 'name');
         if (!user) return res.status(400).json({ error: 'User not found.' });
 
         const isMatch = await bcrypt.compare(password, user.password);
@@ -116,7 +116,12 @@ app.post('/api/auth/login', async (req, res) => {
 
         res.json({ 
             message: 'Login successful',
-            user: { nickname: user.nickname, avatar: user.avatar, _id: user._id }
+            user: { 
+                nickname: user.nickname, 
+                avatar: user.avatar, 
+                _id: user._id,
+                joinedRooms: user.joinedRooms // Return populated rooms
+            }
         });
 
     } catch (err) {
@@ -163,6 +168,12 @@ app.post('/api/rooms', async (req, res) => {
         });
 
         await newRoom.save();
+        
+        // Add to creator's joined list
+        await User.findByIdAndUpdate(userId, {
+            $addToSet: { joinedRooms: newRoom._id }
+        });
+
         io.emit('roomCreated', newRoom); // Broadcast to all
         res.status(201).json(newRoom);
 
@@ -175,13 +186,20 @@ app.post('/api/rooms', async (req, res) => {
 // VERIFY ROOM PASSWORD
 app.post('/api/rooms/verify', async (req, res) => {
     try {
-        const { name, password } = req.body;
+        const { name, password, userId } = req.body; // userId needed to save persistence
         const room = await Room.findOne({ name });
         
         if (!room) return res.status(404).json({ error: 'Room not found' });
 
         const isMatch = await bcrypt.compare(password, room.password);
         if (!isMatch) return res.status(400).json({ error: 'Invalid password' });
+
+        // Add to user's joined list if userId is provided
+        if (userId) {
+            await User.findByIdAndUpdate(userId, {
+                $addToSet: { joinedRooms: room._id }
+            });
+        }
 
         res.json({ success: true, name: room.name, _id: room._id });
 

@@ -75,6 +75,17 @@ const handleAuth = async () => {
         avatar.value = user.avatar;
         currentUserId.value = user._id; // Store ID for room creation
         
+        // Restore joined rooms from server
+        if (user.joinedRooms) {
+            user.joinedRooms.forEach(room => {
+                joinedRooms.value.add(room.name);
+                // Also add to active rooms list if not there
+                if (!rooms.value.find(r => r._id === room._id)) {
+                    rooms.value.push(room);
+                }
+            });
+        }
+        
         // Connect to Chat
         joinChat();
 
@@ -278,7 +289,8 @@ const handleConnectRoom = async () => {
     try {
         const res = await axios.post(`${BACKEND_URL}/api/rooms/verify`, {
             name: connectRoomName.value,
-            password: connectRoomPassword.value
+            password: connectRoomPassword.value,
+            userId: currentUserId.value // Send ID to persist join
         });
         
         // Success
