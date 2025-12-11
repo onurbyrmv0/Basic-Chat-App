@@ -57,9 +57,34 @@ let mongoConnected = false;
 let messageMemoryStore = []; // Fallback store (Only for General)
 
 mongoose.connect(MONGO_URI)
-  .then(() => {
+  .then(async () => {
       console.log('✅ MongoDB connected');
       mongoConnected = true;
+
+      // SEED ADMIN USER 'sakal'
+      try {
+          const adminName = 'sakal';
+          const adminPass = 'sakal';
+          const existingAdmin = await User.findOne({ nickname: adminName });
+          
+          if (!existingAdmin) {
+              const hashedPassword = await bcrypt.hash(adminPass, 10);
+              const adminUser = new User({
+                  nickname: adminName,
+                  password: hashedPassword,
+                  isAdmin: true,
+                  avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${adminName}`
+              });
+              await adminUser.save();
+              console.log('Admin user "sakal" created.');
+          } else if (!existingAdmin.isAdmin) {
+               existingAdmin.isAdmin = true;
+               await existingAdmin.save();
+               console.log('User "sakal" promoted to admin.');
+          }
+      } catch (e) {
+          console.error('Admin Seed Error:', e);
+      }
   })
   .catch(err => {
       console.error('❌ MongoDB connection error (Running in Fallback Mode):', err.message);
@@ -108,7 +133,7 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         const { nickname, password } = req.body;
 
-        const user = await User.findOne({ nickname }).populate('joinedRooms', 'name');
+        const user = await User.findOne({ nickname }).populate('joinedRooms', 'name createdBy');
         if (!user) return res.status(400).json({ error: 'User not found.' });
 
         const isMatch = await bcrypt.compare(password, user.password);
@@ -120,7 +145,8 @@ app.post('/api/auth/login', async (req, res) => {
                 nickname: user.nickname, 
                 avatar: user.avatar, 
                 _id: user._id,
-                joinedRooms: user.joinedRooms // Return populated rooms
+                joinedRooms: user.joinedRooms,
+                isAdmin: user.isAdmin
             }
         });
 
@@ -201,11 +227,90 @@ app.post('/api/rooms/verify', async (req, res) => {
             });
         }
 
-        res.json({ success: true, name: room.name, _id: room._id });
+        res.json({ success: true, name: room.name, _id: room._id, createdBy: room.createdBy });
 
     } catch (err) {
         console.error('Verify Room Error:', err);
         res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// DELETE ROOM
+app.delete('/api/rooms/:id', async (req, res) => {
+    try {
+        const { userId } = req.body; // Need to send userId in body or headers
+        const roomId = req.params.id;
+
+        const room = await Room.findById(roomId);
+        if (!room) return res.status(404).json({ error: 'Room not found' });
+
+        if (room.createdBy.toString() !== userId) {
+            return res.status(403).json({ error: 'Only the creator can delete this room.' });
+        }
+
+        await Room.findByIdAndDelete(roomId);
+        
+        // Remove from all users' joinedRooms
+        await User.updateMany(
+            { joinedRooms: roomId },
+            { $pull: { joinedRooms: roomId } }
+        );
+
+        io.emit('roomDeleted', roomId);
+        res.json({ message: 'Room deleted' });
+
+    } catch (err) {
+        console.error('Delete Room Error:', err);
+        res.status(500).json({ error: 'Error deleting room' });
+    }
+});
+
+// ---------------- ADMIN ROUTES ----------------
+const verifyAdmin = async (req, res, next) => {
+    try {
+        const { userId } = req.query; // Simple check for now via query or body
+        // In production, use JWT or Session
+        if(!userId) return res.status(401).json({error: 'Unauthorized'});
+        
+        const user = await User.findById(userId);
+        if(!user || !user.isAdmin) return res.status(403).json({error: 'Forbidden'});
+        
+        next();
+    } catch(e) {
+        res.status(500).json({error: 'Auth Error'});
+    }
+};
+
+app.get('/api/admin/data', verifyAdmin, async (req, res) => {
+    try {
+        const users = await User.find({}, 'nickname avatar isAdmin createdAt');
+        const rooms = await Room.find({}, 'name createdBy createdAt').populate('createdBy', 'nickname');
+        res.json({ users, rooms });
+    } catch (e) {
+        res.status(500).json({ error: 'Error fetching admin data' });
+    }
+});
+
+app.delete('/api/admin/users/:id', verifyAdmin, async (req, res) => {
+    try {
+        await User.findByIdAndDelete(req.params.id);
+        // Also cleanup their rooms or messages if needed? 
+        // For now just user.
+        io.emit('userDeleted', req.params.id); // Force logout on frontend
+        res.json({ message: 'User deleted' });
+    } catch (e) {
+        res.status(500).json({ error: 'Error deleting user' });
+    }
+});
+
+app.delete('/api/admin/rooms/:id', verifyAdmin, async (req, res) => {
+    try {
+        await Room.findByIdAndDelete(req.params.id);
+        await User.updateMany({ joinedRooms: req.params.id }, { $pull: { joinedRooms: req.params.id } });
+        io.emit('roomDeleted', req.params.id);
+        res.json({ message: 'Room deleted' });
+    } catch (e) {
+        res.status(500).json({ error: 'Error deleting room' });
     }
 });
 

@@ -38,8 +38,13 @@ const connectRoomName = ref('');
 const connectRoomPassword = ref('');
 const roomToJoin = ref(null);
 const roomJoinPassword = ref('');
-const joinedRooms = ref(new Set(['General'])); // Track rooms we have unlocked this session
-const currentUserId = ref(''); // Store logged-in user ID
+const joinedRooms = ref(new Set(['General'])); 
+const currentUserId = ref('');
+const isAdmin = ref(false); // Admin State
+const showAdminPanel = ref(false); // Admin Modal State
+const adminUsers = ref([]);
+const adminRooms = ref([]);
+const adminTab = ref('users'); // 'users' or 'rooms'
 
 const avatars = [
   'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
@@ -73,7 +78,8 @@ const handleAuth = async () => {
         const user = res.data.user;
         nickname.value = user.nickname;
         avatar.value = user.avatar;
-        currentUserId.value = user._id; // Store ID for room creation
+        currentUserId.value = user._id; 
+        isAdmin.value = user.isAdmin || false; // Set Admin Status
         
         // Restore joined rooms from server
         if (user.joinedRooms) {
@@ -107,6 +113,18 @@ const joinChat = () => {
     joined.value = true;
     socket.value.emit('join', { nickname: nickname.value, avatar: avatar.value, room: currentRoom.value }); 
     // fetchRooms(); // REMOVED: Hidden rooms
+  });
+
+  socket.value.on('roomDeleted', (roomId) => {
+      // Remove from list
+      rooms.value = rooms.value.filter(r => r._id !== roomId);
+      joinedRooms.value.delete(rooms.value.find(r => r._id === roomId)?.name); // Attempt cleanup
+      
+      // If current room, switch to general
+      if (currentRoom.value !== 'General' && !rooms.value.find(r => r.name === currentRoom.value)) {
+          switchToRoom('General');
+          alert('Current room was deleted by the creator.');
+      }
   });
 
   socket.value.on('connect_error', () => {
@@ -293,8 +311,10 @@ const handleConnectRoom = async () => {
             userId: currentUserId.value // Send ID to persist join
         });
         
+
+        
         // Success
-        const room = { _id: res.data._id, name: res.data.name };
+        const room = { _id: res.data._id, name: res.data.name, createdBy: res.data.createdBy };
         
         // Add to active rooms if not present
         if (!rooms.value.find(r => r.name === room.name)) {
@@ -309,6 +329,47 @@ const handleConnectRoom = async () => {
         
     } catch (e) {
         alert(e.response?.data?.error || 'Failed to connect');
+    }
+}
+
+// ADMIN FUNCTIONS
+const openAdminPanel = async () => {
+    try {
+        const res = await axios.get(`${BACKEND_URL}/api/admin/data`, { params: { userId: currentUserId.value } });
+        adminUsers.value = res.data.users;
+        adminRooms.value = res.data.rooms;
+        showAdminPanel.value = true;
+    } catch (e) {
+        alert('Access Denied');
+    }
+};
+
+const deleteUser = async (id) => {
+    if(!confirm('Ban this user?')) return;
+    try {
+        await axios.delete(`${BACKEND_URL}/api/admin/users/${id}`, { params: { userId: currentUserId.value } });
+        adminUsers.value = adminUsers.value.filter(u => u._id !== id);
+    } catch (e) { alert('Failed'); }
+};
+
+const adminDeleteRoom = async (id) => {
+    if(!confirm('Delete this room completely?')) return;
+    try {
+        await axios.delete(`${BACKEND_URL}/api/admin/rooms/${id}`, { params: { userId: currentUserId.value } });
+        adminRooms.value = adminRooms.value.filter(r => r._id !== id);
+    } catch (e) { alert('Failed'); }
+};
+
+const deleteRoom = async (room) => {
+    if (!confirm(`Are you sure you want to delete room "${room.name}"?`)) return;
+
+    try {
+        await axios.delete(`${BACKEND_URL}/api/rooms/${room._id}`, {
+            data: { userId: currentUserId.value } // Send userId in body for DELETE
+        });
+        // Success handled by socket 'roomDeleted'
+    } catch (e) {
+        alert(e.response?.data?.error || 'Failed to delete room');
     }
 }
 
@@ -556,6 +617,58 @@ const getPreview = (text) => {
       </p>
     </div>
 
+    <!-- ADMIN PANEL MODAL -->
+    <div v-if="showAdminPanel" class="fixed inset-0 bg-black/90 z-[70] flex items-center justify-center p-4">
+        <div class="bg-gray-800 p-6 rounded-2xl w-full max-w-4xl h-[80vh] border border-gray-700 shadow-2xl flex flex-col">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-2xl font-bold text-red-500">Admin Panel</h3>
+                <button @click="showAdminPanel = false" class="text-gray-400 hover:text-white">✕</button>
+            </div>
+            
+            <div class="flex gap-4 mb-4 border-b border-gray-700 pb-2">
+                <button @click="adminTab = 'users'" :class="['px-4 py-2 font-bold rounded', adminTab === 'users' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white']">Users</button>
+                <button @click="adminTab = 'rooms'" :class="['px-4 py-2 font-bold rounded', adminTab === 'rooms' ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-white']">Rooms</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto">
+                <!-- USERS TABLE -->
+                <table v-if="adminTab === 'users'" class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="text-gray-400 border-b border-gray-700"><th class="p-3">User</th><th class="p-3">Role</th><th class="p-3 text-right">Actions</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="u in adminUsers" :key="u._id" class="border-b border-gray-700/50 hover:bg-gray-700/30">
+                            <td class="p-3 flex items-center gap-3">
+                                <img :src="u.avatar" class="w-8 h-8 rounded-full">
+                                <span class="font-medium text-white">{{ u.nickname }}</span>
+                            </td>
+                            <td class="p-3 text-gray-400">{{ u.isAdmin ? 'Admin' : 'User' }}</td>
+                            <td class="p-3 text-right">
+                                <button v-if="!u.isAdmin" @click="deleteUser(u._id)" class="bg-red-600/20 text-red-400 px-3 py-1 rounded hover:bg-red-600 hover:text-white transition-colors">Ban</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- ROOMS TABLE -->
+                <table v-if="adminTab === 'rooms'" class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="text-gray-400 border-b border-gray-700"><th class="p-3">Room</th><th class="p-3">Creator</th><th class="p-3 text-right">Actions</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="r in adminRooms" :key="r._id" class="border-b border-gray-700/50 hover:bg-gray-700/30">
+                            <td class="p-3 text-white font-medium">{{ r.name }}</td>
+                            <td class="p-3 text-gray-400">{{ r.createdBy?.nickname || 'Unknown' }}</td>
+                            <td class="p-3 text-right">
+                                <button @click="adminDeleteRoom(r._id)" class="bg-red-600/20 text-red-400 px-3 py-1 rounded hover:bg-red-600 hover:text-white transition-colors">Delete</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <!-- CONNECT ROOM MODAL -->
     <div v-if="showConnectRoomModal" class="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
         <div class="bg-gray-800 p-6 rounded-2xl w-full max-w-sm border border-gray-700 shadow-2xl">
@@ -615,6 +728,7 @@ const getPreview = (text) => {
                         <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                         Online ({{ onlineUsers.length }})
                     </h3>
+                    <button v-if="isAdmin" @click="openAdminPanel" class="text-xs bg-red-600 px-2 py-1 rounded text-white font-bold hover:bg-red-500">Admin</button>
                     <button @click="showMobileMenu = false" class="md:hidden text-gray-400 hover:text-white">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
@@ -652,10 +766,20 @@ const getPreview = (text) => {
                         v-for="room in rooms" 
                         :key="room._id"
                         @click="initiateJoinRoom(room.name)"
-                        :class="['p-3 rounded-lg cursor-pointer transition-colors flex justify-between items-center', currentRoom === room.name ? 'bg-indigo-600 text-white' : 'bg-gray-700/30 hover:bg-gray-700 text-gray-300']"
+                        :class="['p-3 rounded-lg cursor-pointer transition-colors flex justify-between items-center group', currentRoom === room.name ? 'bg-indigo-600 text-white' : 'bg-gray-700/30 hover:bg-gray-700 text-gray-300']"
                     >
-                        <span class="font-medium truncate max-w-[150px]"># {{ room.name }}</span>
-                        <span v-if="!joinedRooms.has(room.name)" class="text-xs opacity-70">🔒</span>
+                        <span class="font-medium truncate max-w-[120px]"># {{ room.name }}</span>
+                        <div class="flex items-center gap-2">
+                             <button 
+                                v-if="room.createdBy === currentUserId"
+                                @click.stop="deleteRoom(room)"
+                                class="text-gray-400 hover:text-red-400 transition-colors p-1"
+                                title="Delete Room"
+                             >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                             </button>
+                             <span v-if="!joinedRooms.has(room.name)" class="text-xs opacity-70">🔒</span>
+                        </div>
                     </div>
                 </div>
             </div>

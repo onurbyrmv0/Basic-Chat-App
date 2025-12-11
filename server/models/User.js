@@ -23,7 +23,11 @@ const userSchema = new mongoose.Schema({
   joinedRooms: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Room'
-  }]
+  }],
+  isAdmin: {
+    type: Boolean,
+    default: false
+  }
 });
 
 module.exports = mongoose.model('User', userSchema);
