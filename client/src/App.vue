@@ -141,15 +141,15 @@ const handleFileUpload = async (event) => {
     });
 
     const { url, type } = res.data;
-    // Determine type based on mimetype
     let msgType = 'text';
     if (type.startsWith('image/')) msgType = 'image';
-    if (type.startsWith('video/')) msgType = 'video';
+    else if (type.startsWith('video/')) msgType = 'video';
+    else msgType = 'file'; // Default to generic file for audio/rar/zip/etc if not handled specifically
 
     const msgData = {
       nickname: nickname.value,
       avatar: avatar.value,
-      content: '', // No text content for file message
+      content: file.name, // Use filename as content for generic files
       type: msgType,
       fileUrl: url
     };
@@ -445,6 +445,20 @@ const uploadAudio = async (file) => {
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-indigo-300"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
                             <audio controls :src="msg.fileUrl" class="w-full h-8"></audio>
                         </div>
+
+                        <!-- Generic File (RAR, ZIP, PDF, etc.) -->
+                        <div v-else-if="msg.type === 'file'" class="flex items-center gap-3 p-2 bg-gray-800/50 rounded-xl border border-gray-600 hover:bg-gray-700/80 transition-colors min-w-[200px] cursor-pointer" @click="() => {} /* Allow click to bubble to parent or just use link */">
+                            <div class="p-3 bg-indigo-500/20 rounded-lg text-indigo-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                            </div>
+                            <div class="flex flex-col overflow-hidden">
+                                <span class="font-bold text-sm truncate text-white max-w-[150px]">{{ msg.content }}</span>
+                                <a :href="msg.fileUrl" target="_blank" download class="text-xs text-indigo-300 hover:text-indigo-200 hover:underline flex items-center gap-1 mt-0.5">
+                                    Download File
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                </a>
+                            </div>
+                        </div>
                     </div>
                     
                     <!-- Reply Action -->
@@ -483,7 +497,7 @@ const uploadAudio = async (file) => {
       <footer class="bg-gray-800/95 backdrop-blur-md p-4 border-t border-gray-700 z-10 relative">
         <div class="flex gap-3 md:gap-4 max-w-5xl mx-auto items-end">
             <label class="cursor-pointer text-gray-400 hover:text-indigo-400 transition-all p-3 bg-gray-700/50 hover:bg-gray-700 rounded-full border border-gray-600 hover:border-indigo-500/50 shadow-sm flex-shrink-0 active:scale-95">
-                <input ref="fileInput" type="file" @change="handleFileUpload" class="hidden" accept="image/*,video/*">
+                <input ref="fileInput" type="file" @change="handleFileUpload" class="hidden" accept="*/*">
                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
             </label>
             
