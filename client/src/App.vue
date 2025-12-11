@@ -397,7 +397,7 @@ const uploadAudio = async (file) => {
       </header>
 
       <!-- Messages Area -->
-      <main ref="messagesContainer" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 bg-gray-900 scroll-smooth relative z-0">
+      <main ref="messagesContainer" class="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 space-y-6 bg-gray-900 scroll-smooth relative z-0">
         <div v-if="messages.length === 0" class="h-full flex flex-col items-center justify-center text-gray-500 opacity-50">
             <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="mb-4"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
             <p>No messages yet. Say hello!</p>
