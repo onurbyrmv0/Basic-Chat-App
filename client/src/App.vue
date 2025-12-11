@@ -294,11 +294,14 @@ const detectLinks = async (text) => {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const matches = text.match(urlRegex);
     if (matches) {
+        console.log('Links detected:', matches);
         for (const url of matches) {
             if (!linkPreviews.has(url)) {
                 try {
+                    console.log('Fetching meta for:', url);
                     const { data } = await axios.get(`${BACKEND_URL}/api/url-meta?url=${encodeURIComponent(url)}`);
-                    if (data && data.title) {
+                    console.log('Meta received:', data);
+                    if (data && (data.title || data.image)) {
                         linkPreviews.set(url, data);
                     }
                 } catch (e) {
@@ -528,13 +531,18 @@ const getPreview = (text) => {
                                 </a>
                             </div>
                         </div>
+
+                        <!-- Reply Action (Inside Bubble) -->
+                        <button 
+                            @click.stop="setReply(msg)" 
+                            class="absolute -top-2 -right-2 p-1.5 text-gray-400 hover:text-white bg-gray-700 hover:bg-indigo-500 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-all z-20 md:opacity-0"
+                            :class="{'opacity-100': showMobileMenu || true /* Always visible on mobile? No, let's make it opacity-100 on mobile via media query default or just force visible */}"
+                            title="Reply"
+                        >
+                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
+                        </button>
                     </div>
                     
-                    <!-- Reply Action -->
-                    <!-- Reply Action (Always visible on mobile, hover on desktop) -->
-                     <button @click="setReply(msg)" class="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity absolute top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-white bg-gray-800/90 rounded-full shadow-md z-10" :class="msg.nickname === nickname ? '-left-10 md:-left-12' : '-right-10 md:-right-12'" title="Reply">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
-                    </button>
                     
                 </div>
             </div>
