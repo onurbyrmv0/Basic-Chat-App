@@ -21,7 +21,6 @@ const onlineUsers = ref([]);
 const replyingTo = ref(null);
 const showMobileMenu = ref(false);
 const searchQuery = ref('');
-const searchQuery = ref('');
 const linkPreviews = reactive(new Map()); // url -> meta object
 const password = ref('');
 const isLoginMode = ref(true); // Toggle between Login and Register
@@ -222,6 +221,77 @@ const scrollToBottom = async () => {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
   }
 };
+
+// ROOM LOGIC
+const fetchRooms = async () => {
+    try {
+        const res = await axios.get(`${BACKEND_URL}/api/rooms`);
+        rooms.value = res.data;
+    } catch (e) {
+        console.error('Error fetching rooms', e);
+    }
+}
+
+const handleCreateRoom = async () => {
+    if (!newRoomName.value.trim() || !newRoomPassword.value.trim()) {
+        alert('Room name and password are required!');
+        return;
+    }
+    try {
+        await axios.post(`${BACKEND_URL}/api/rooms`, {
+            name: newRoomName.value,
+            password: newRoomPassword.value, // Hashed on server
+            userId: 'temp_id' // You'd normally send user ID here if available in state, but simpler for now
+        });
+        
+        // Reset and refresh
+        newRoomName.value = '';
+        newRoomPassword.value = '';
+        showCreateRoomModal.value = false;
+        fetchRooms();
+        alert('Room created!');
+    } catch (e) {
+        alert(e.response?.data?.error || 'Error creating room');
+    }
+}
+
+const initiateJoinRoom = (roomName) => {
+    if (roomName === 'General' || joinedRooms.value.has(roomName)) {
+        switchToRoom(roomName);
+    } else {
+        roomToJoin.value = roomName;
+        roomJoinPassword.value = '';
+        showPasswordModal.value = true;
+    }
+}
+
+const verifyAndJoinRoom = async () => {
+    if (!roomJoinPassword.value) return;
+    
+    // Find room ID from name
+    const targetRoom = rooms.value.find(r => r.name === roomToJoin.value);
+    if (!targetRoom) return;
+
+    try {
+        await axios.post(`${BACKEND_URL}/api/rooms/verify`, {
+            roomId: targetRoom._id,
+            password: roomJoinPassword.value
+        });
+        
+        // Success
+        joinedRooms.value.add(roomToJoin.value);
+        showPasswordModal.value = false;
+        switchToRoom(roomToJoin.value);
+    } catch (e) {
+        alert('Incorrect Password');
+    }
+}
+
+const switchToRoom = (roomName) => {
+    currentRoom.value = roomName;
+    socket.value.emit('switchRoom', roomName);
+    showMobileMenu.value = false; // Close drawer on mobile
+}
 
 
 const formatTime = (dateStr) => {
@@ -438,6 +508,32 @@ const getPreview = (text) => {
       </p>
     </div>
 
+    <!-- CREATE ROOM MODAL -->
+    <div v-if="showCreateRoomModal" class="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
+        <div class="bg-gray-800 p-6 rounded-2xl w-full max-w-sm border border-gray-700 shadow-2xl">
+            <h3 class="text-xl font-bold mb-4 text-white">Create Private Room</h3>
+            <input v-model="newRoomName" placeholder="Room Name" class="w-full mb-3 bg-gray-700 p-3 rounded text-white focus:ring-2 focus:ring-indigo-500 outline-none">
+            <input v-model="newRoomPassword" type="password" placeholder="Password (Required)" class="w-full mb-4 bg-gray-700 p-3 rounded text-white focus:ring-2 focus:ring-indigo-500 outline-none">
+            <div class="flex gap-2">
+                <button @click="showCreateRoomModal = false" class="flex-1 py-2 bg-gray-600 rounded hover:bg-gray-500 text-white">Cancel</button>
+                <button @click="handleCreateRoom" class="flex-1 py-2 bg-indigo-600 rounded hover:bg-indigo-500 text-white font-bold">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PASSWORD MODAL -->
+    <div v-if="showPasswordModal" class="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
+        <div class="bg-gray-800 p-6 rounded-2xl w-full max-w-sm border border-gray-700 shadow-2xl">
+            <h3 class="text-xl font-bold mb-4 text-white">Enter Password</h3>
+            <p class="text-gray-400 mb-4 text-sm">Room: <span class="text-indigo-400 font-bold">{{ roomToJoin }}</span></p>
+            <input v-model="roomJoinPassword" type="password" placeholder="Password" class="w-full mb-4 bg-gray-700 p-3 rounded text-white focus:ring-2 focus:ring-indigo-500 outline-none" @keyup.enter="verifyAndJoinRoom">
+            <div class="flex gap-2">
+                <button @click="showPasswordModal = false" class="flex-1 py-2 bg-gray-600 rounded hover:bg-gray-500 text-white">Cancel</button>
+                <button @click="verifyAndJoinRoom" class="flex-1 py-2 bg-green-600 rounded hover:bg-green-500 text-white font-bold">Join</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Chat Screen -->
     <div v-else class="flex w-full md:max-w-6xl h-full md:h-[90vh] gap-4">
         
@@ -451,22 +547,50 @@ const getPreview = (text) => {
         <aside 
             :class="['fixed md:relative top-0 left-0 h-full md:h-auto w-64 bg-gray-800 md:rounded-3xl shadow-2xl border-r md:border border-gray-700 overflow-hidden z-50 transition-transform duration-300 transform', showMobileMenu ? 'translate-x-0' : '-translate-x-full md:translate-x-0']"
         >
-            <div class="p-4 border-b border-gray-700 bg-gray-800/95 backdrop-blur-md flex justify-between items-center">
-                <h3 class="font-bold text-gray-200 flex items-center gap-2">
-                    <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    Online ({{ onlineUsers.length }})
-                </h3>
-                <button @click="showMobileMenu = false" class="md:hidden text-gray-400 hover:text-white">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                </button>
-            </div>
-            <div class="flex-1 overflow-y-auto p-3 space-y-2">
-                <div v-for="user in onlineUsers" :key="user.nickname" class="flex items-center gap-3 p-2 hover:bg-gray-700/50 rounded-xl transition-colors cursor-default">
-                    <div class="relative">
-                        <img :src="user.avatar" class="w-8 h-8 rounded-full bg-gray-700 border border-gray-600">
-                        <span class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-gray-800 rounded-full"></span>
+            <div class="flex-1 overflow-y-auto h-full flex flex-col">
+                <!-- ONLINE USERS -->
+                <div class="p-4 border-b border-gray-700 bg-gray-800/95 backdrop-blur-md flex justify-between items-center sticky top-0 z-10">
+                    <h3 class="font-bold text-gray-200 flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                        Online ({{ onlineUsers.length }})
+                    </h3>
+                    <button @click="showMobileMenu = false" class="md:hidden text-gray-400 hover:text-white">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+                <div class="p-3 space-y-2 border-b border-gray-700 pb-4 max-h-[40%] overflow-y-auto">
+                    <div v-for="user in onlineUsers" :key="user.nickname" class="flex items-center gap-3 p-2 hover:bg-gray-700/50 rounded-xl transition-colors cursor-default">
+                        <div class="relative">
+                            <img :src="user.avatar" class="w-8 h-8 rounded-full bg-gray-700 border border-gray-600">
+                            <span class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-gray-800 rounded-full"></span>
+                        </div>
+                        <span class="text-sm font-medium text-gray-300 truncate">{{ user.nickname }}</span>
                     </div>
-                    <span class="text-sm font-medium text-gray-300 truncate">{{ user.nickname }}</span>
+                </div>
+
+                <!-- ROOMS LIST -->
+                <div class="p-4 border-b border-gray-700 bg-gray-800/95 backdrop-blur-md sticky top-0 z-10 flex justify-between items-center">
+                    <h3 class="font-bold text-gray-200">Rooms</h3>
+                    <button @click="showCreateRoomModal = true" class="text-xs bg-indigo-600 px-2 py-1 rounded hover:bg-indigo-500 text-white font-bold" title="Create Private Room">+</button>
+                </div>
+                <div class="p-3 space-y-2 overflow-y-auto flex-1">
+                     <!-- General -->
+                     <div 
+                        @click="initiateJoinRoom('General')"
+                        :class="['p-3 rounded-lg cursor-pointer transition-colors flex justify-between items-center', currentRoom === 'General' ? 'bg-indigo-600 text-white' : 'bg-gray-700/30 hover:bg-gray-700 text-gray-300']"
+                     >
+                        <span class="font-medium"># General</span>
+                    </div>
+                    <!-- Custom Rooms -->
+                    <div 
+                        v-for="room in rooms" 
+                        :key="room._id"
+                        @click="initiateJoinRoom(room.name)"
+                        :class="['p-3 rounded-lg cursor-pointer transition-colors flex justify-between items-center', currentRoom === room.name ? 'bg-indigo-600 text-white' : 'bg-gray-700/30 hover:bg-gray-700 text-gray-300']"
+                    >
+                        <span class="font-medium truncate max-w-[150px]"># {{ room.name }}</span>
+                        <span v-if="!joinedRooms.has(room.name)" class="text-xs opacity-70">🔒</span>
+                    </div>
                 </div>
             </div>
         </aside>
@@ -492,9 +616,15 @@ const getPreview = (text) => {
                 </div>
             </div>
             <div>
-                <h2 class="text-lg font-bold text-white tracking-wide">General Room</h2>
+                <h2 class="text-lg font-bold text-white tracking-wide flex items-center gap-2">
+                    <span>{{ currentRoom }}</span>
+                    <span v-if="currentRoom !== 'General'" class="text-[10px] bg-indigo-500/80 px-1.5 py-0.5 rounded text-white font-normal uppercase tracking-wider">Private</span>
+                </h2>
                 <div class="flex items-center gap-2">
-                     <p class="text-xs text-indigo-300 font-medium hidden md:block">Live Chat</p>
+                     <p class="text-xs text-indigo-300 font-medium hidden md:block">
+                        <span class="w-1.5 h-1.5 bg-green-500 rounded-full inline-block mr-1"></span>
+                        {{ onlineUsers.length }} online
+                     </p>
                      <div class="relative group">
                          <input 
                             v-model="searchQuery" 
