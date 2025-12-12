@@ -58,46 +58,54 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/chat-app';
 let mongoConnected = false;
 let messageMemoryStore = []; // Fallback store (Only for General)
 
-mongoose.connect(MONGO_URI)
-  .then(async () => {
-      console.log('✅ MongoDB connected');
-      mongoConnected = true;
+const connectWithRetry = () => {
+  console.log('⏳ Connecting to MongoDB...');
+  mongoose.connect(MONGO_URI)
+    .then(async () => {
+        console.log('✅ MongoDB connected');
+        mongoConnected = true;
 
-      // SEED ADMIN USER 'sakal'
-      try {
-          const adminName = 'sakal';
-          const adminPass = 'sakal';
-          const existingAdmin = await User.findOne({ nickname: adminName });
-          
-          if (!existingAdmin) {
-              const hashedPassword = await bcrypt.hash(adminPass, 10);
-              const adminUser = new User({
-                  nickname: adminName,
-                  password: hashedPassword,
-                  isAdmin: true,
-                  avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${adminName}`
-              });
-              await adminUser.save();
-              console.log('Admin user "sakal" created.');
-          } else if (!existingAdmin.isAdmin) {
-               existingAdmin.isAdmin = true;
-               await existingAdmin.save();
-               console.log('User "sakal" promoted to admin.');
-          }
-      } catch (e) {
-          console.error('Admin Seed Error:', e);
-      }
-  })
-  .catch(err => {
-      console.error('❌ MongoDB connection error (Running in Fallback Mode):', err.message);
-      mongoConnected = false;
-  });
+        // SEED ADMIN USER 'sakal'
+        try {
+            const adminName = 'sakal';
+            const adminPass = 'sakal';
+            const existingAdmin = await User.findOne({ nickname: adminName });
+            
+            if (!existingAdmin) {
+                const hashedPassword = await bcrypt.hash(adminPass, 10);
+                const adminUser = new User({
+                    nickname: adminName,
+                    password: hashedPassword,
+                    isAdmin: true,
+                    avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${adminName}`
+                });
+                await adminUser.save();
+                console.log('Admin user "sakal" created.');
+            } else if (!existingAdmin.isAdmin) {
+                 existingAdmin.isAdmin = true;
+                 await existingAdmin.save();
+                 console.log('User "sakal" promoted to admin.');
+            }
+        } catch (e) {
+            console.error('Admin Seed Error:', e);
+        }
+    })
+    .catch(err => {
+        console.error('❌ MongoDB connection error:', err.message);
+        console.log('🔄 Retrying in 5 seconds...');
+        setTimeout(connectWithRetry, 5000);
+    });
+};
+
+connectWithRetry();
 
 // ---------------- AUTH ROUTES ----------------
 
 // REGISTER
 app.post('/api/auth/register', async (req, res) => {
     try {
+        if (!mongoConnected) return res.status(503).json({ error: 'Database not ready' });
+        
         const { nickname, password, avatar } = req.body;
         
         if (!nickname || !password || password.length < 4) {

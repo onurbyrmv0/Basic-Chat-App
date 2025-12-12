@@ -6,6 +6,11 @@ services:
     container_name: chat-mongo
     ports:
       - "27017:27017"
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     volumes:
       - mongo-data:/data/db
 
@@ -18,7 +23,8 @@ services:
       - PORT=3000
       - MONGO_URI=mongodb://mongo:27017/chat-app
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
     volumes:
       - ./server/uploads:/app/uploads
       - ./backups:/app/backups
