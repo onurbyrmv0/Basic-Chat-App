@@ -65,7 +65,7 @@ const isAdmin = ref(initialUser.isAdmin || false); // Admin State
 const showAdminPanel = ref(false); // Admin Modal State
 const adminUsers = ref([]);
 const adminRooms = ref([]);
-const adminRooms = ref([]);
+
 const adminTab = ref('users'); // 'users' or 'rooms'
 const showProfileMenu = ref(false); // Toggle for profile dropdown
 
