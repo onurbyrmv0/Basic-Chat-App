@@ -828,7 +828,8 @@ onMounted(() => {
                     </div>
                 </div>
             </div>
-            </div>
+            
+
             
              <!-- LOGOUT BUTTON (Mobile/Sidebar) -->
              <div class="p-4 border-t border-gray-700 bg-gray-800/95 sticky bottom-0 z-10">
