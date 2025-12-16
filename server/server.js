@@ -1,13 +1,10 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
-const Message = require('./models/Message');
-const User = require('./models/User');
-const Room = require('./models/Room');
+const { sequelize, User, Room, Message } = require('./models');
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const cheerio = require('cheerio');
@@ -16,7 +13,7 @@ const { exec } = require('child_process');
 require('dotenv').config();
 
 const app = express();
-app.enable('trust proxy'); // Fix for Mixed Content (HTTPS) behind Nginx
+app.enable('trust proxy'); 
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
@@ -29,8 +26,6 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Serve Frontend Static Files
 app.use(express.static(path.join(__dirname, '../client/dist')));
 
 // Ensure uploads directory exists
@@ -53,48 +48,47 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// MongoDB Connection
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/chat-app';
-let mongoConnected = false;
-let messageMemoryStore = []; // Fallback store (Only for General)
+// Database Connection & Sync
+let dbConnected = false;
 
-const connectWithRetry = () => {
-  console.log('⏳ Connecting to MongoDB...');
-  mongoose.connect(MONGO_URI)
-    .then(async () => {
-        console.log('✅ MongoDB connected');
-        mongoConnected = true;
+const connectWithRetry = async () => {
+  console.log('⏳ Connecting to PostgreSQL...');
+  try {
+      await sequelize.authenticate();
+      console.log('✅ PostgreSQL connected');
+      await sequelize.sync({ force: false }); // Set force: true to drop/recreate tables (WARNING: DATA LOSS)
+      console.log('✅ Models synced');
+      dbConnected = true;
 
-        // SEED ADMIN USER 'sakal'
-        try {
-            const adminName = 'sakal';
-            const adminPass = 'sakal';
-            const existingAdmin = await User.findOne({ nickname: adminName });
-            
-            if (!existingAdmin) {
-                const hashedPassword = await bcrypt.hash(adminPass, 10);
-                const adminUser = new User({
-                    nickname: adminName,
-                    password: hashedPassword,
-                    isAdmin: true,
-                    avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${adminName}`
-                });
-                await adminUser.save();
-                console.log('Admin user "sakal" created.');
-            } else if (!existingAdmin.isAdmin) {
-                 existingAdmin.isAdmin = true;
-                 await existingAdmin.save();
-                 console.log('User "sakal" promoted to admin.');
-            }
-        } catch (e) {
-            console.error('Admin Seed Error:', e);
-        }
-    })
-    .catch(err => {
-        console.error('❌ MongoDB connection error:', err.message);
-        console.log('🔄 Retrying in 5 seconds...');
-        setTimeout(connectWithRetry, 5000);
-    });
+      // SEED ADMIN USER 'sakal'
+      try {
+          const adminName = 'sakal';
+          const adminPass = 'sakal';
+          const existingAdmin = await User.findOne({ where: { nickname: adminName } });
+          
+          if (!existingAdmin) {
+              const hashedPassword = await bcrypt.hash(adminPass, 10);
+              await User.create({
+                  nickname: adminName,
+                  password: hashedPassword,
+                  isAdmin: true,
+                  avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${adminName}`
+              });
+              console.log('Admin user "sakal" created.');
+          } else if (!existingAdmin.isAdmin) {
+               existingAdmin.isAdmin = true;
+               await existingAdmin.save();
+               console.log('User "sakal" promoted to admin.');
+          }
+      } catch (e) {
+          console.error('Admin Seed Error:', e);
+      }
+
+  } catch (err) {
+      console.error('❌ Database connection error:', err.message);
+      console.log('🔄 Retrying in 5 seconds...');
+      setTimeout(connectWithRetry, 5000);
+  }
 };
 
 connectWithRetry();
@@ -104,7 +98,7 @@ connectWithRetry();
 // REGISTER
 app.post('/api/auth/register', async (req, res) => {
     try {
-        if (!mongoConnected) return res.status(503).json({ error: 'Database not ready' });
+        if (!dbConnected) return res.status(503).json({ error: 'Database not ready' });
         
         const { nickname, password, avatar } = req.body;
         
@@ -112,24 +106,22 @@ app.post('/api/auth/register', async (req, res) => {
             return res.status(400).json({ error: 'Nickname and password (min 4 chars) required.' });
         }
 
-        const existingUser = await User.findOne({ nickname });
+        const existingUser = await User.findOne({ where: { nickname } });
         if (existingUser) {
             return res.status(400).json({ error: 'Nickname already exists.' });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
         
-        const newUser = new User({
+        const newUser = await User.create({
             nickname,
             password: hashedPassword,
             avatar: avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${nickname}`
         });
 
-        await newUser.save();
-
         res.status(201).json({ 
             message: 'User registered successfully',
-            user: { nickname: newUser.nickname, avatar: newUser.avatar, _id: newUser._id } 
+            user: { nickname: newUser.nickname, avatar: newUser.avatar, _id: newUser.id } 
         });
 
     } catch (err) {
@@ -143,7 +135,16 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         const { nickname, password } = req.body;
 
-        const user = await User.findOne({ nickname }).populate('joinedRooms', 'name createdBy');
+        const user = await User.findOne({ 
+            where: { nickname },
+            include: [{ 
+                model: Room, 
+                as: 'joinedRooms', 
+                attributes: ['name', 'createdBy'],
+                through: { attributes: [] } 
+            }]
+        });
+
         if (!user) return res.status(400).json({ error: 'User not found.' });
 
         const isMatch = await bcrypt.compare(password, user.password);
@@ -154,8 +155,8 @@ app.post('/api/auth/login', async (req, res) => {
             user: { 
                 nickname: user.nickname, 
                 avatar: user.avatar, 
-                _id: user._id,
-                joinedRooms: user.joinedRooms,
+                _id: user.id,
+                joinedRooms: user.joinedRooms.map(r => ({ _id: r.id, name: r.name, createdBy: r.createdBy })),
                 isAdmin: user.isAdmin
             }
         });
@@ -171,9 +172,8 @@ app.post('/api/auth/login', async (req, res) => {
 // GET ROOMS
 app.get('/api/rooms', async (req, res) => {
     try {
-        if (!mongoConnected) return res.json([]);
-        // Return only names and IDs
-        const rooms = await Room.find({}, 'name createdAt createdBy'); 
+        if (!dbConnected) return res.json([]);
+        const rooms = await Room.findAll({ attributes: ['id', 'name', 'createdAt', 'createdBy'] }); 
         res.json(rooms);
     } catch (err) {
         console.error('Get Rooms Error:', err);
@@ -190,25 +190,24 @@ app.post('/api/rooms', async (req, res) => {
             return res.status(400).json({ error: 'Name, Password and UserID required.' });
         }
 
-        const existingRoom = await Room.findOne({ name });
+        const existingRoom = await Room.findOne({ where: { name } });
         if (existingRoom) {
             return res.status(400).json({ error: 'Room name already exists.' });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
         
-        const newRoom = new Room({
+        const newRoom = await Room.create({
             name,
             password: hashedPassword,
             createdBy: userId
         });
-
-        await newRoom.save();
         
         // Add to creator's joined list
-        await User.findByIdAndUpdate(userId, {
-            $addToSet: { joinedRooms: newRoom._id }
-        });
+        const user = await User.findByPk(userId);
+        if (user) {
+            await user.addJoinedRoom(newRoom);
+        }
 
         io.emit('roomCreated', newRoom); // Broadcast to all
         res.status(201).json(newRoom);
@@ -222,8 +221,8 @@ app.post('/api/rooms', async (req, res) => {
 // VERIFY ROOM PASSWORD
 app.post('/api/rooms/verify', async (req, res) => {
     try {
-        const { name, password, userId } = req.body; // userId needed to save persistence
-        const room = await Room.findOne({ name });
+        const { name, password, userId } = req.body; 
+        const room = await Room.findOne({ where: { name } });
         
         if (!room) return res.status(404).json({ error: 'Room not found' });
 
@@ -232,12 +231,13 @@ app.post('/api/rooms/verify', async (req, res) => {
 
         // Add to user's joined list if userId is provided
         if (userId) {
-            await User.findByIdAndUpdate(userId, {
-                $addToSet: { joinedRooms: room._id }
-            });
+            const user = await User.findByPk(userId);
+            if (user) {
+                await user.addJoinedRoom(room);
+            }
         }
 
-        res.json({ success: true, name: room.name, _id: room._id, createdBy: room.createdBy });
+        res.json({ success: true, name: room.name, _id: room.id, createdBy: room.createdBy });
 
     } catch (err) {
         console.error('Verify Room Error:', err);
@@ -248,24 +248,21 @@ app.post('/api/rooms/verify', async (req, res) => {
 // DELETE ROOM
 app.delete('/api/rooms/:id', async (req, res) => {
     try {
-        const { userId } = req.body; // Need to send userId in body or headers
+        const { userId } = req.body; 
         const roomId = req.params.id;
 
-        const room = await Room.findById(roomId);
+        const room = await Room.findByPk(roomId);
         if (!room) return res.status(404).json({ error: 'Room not found' });
 
-        if (room.createdBy.toString() !== userId) {
+        // Check if creator (Note: createdBy is int, userId might be string/int)
+        if (room.createdBy.toString() !== userId.toString()) {
             return res.status(403).json({ error: 'Only the creator can delete this room.' });
         }
 
-        await Room.findByIdAndDelete(roomId);
+        await room.destroy();
         
-        // Remove from all users' joinedRooms
-        await User.updateMany(
-            { joinedRooms: roomId },
-            { $pull: { joinedRooms: roomId } }
-        );
-
+        // Association cleanup is handled by Sequelize cascades usually, or simple deletion from join table handles it.
+        
         io.emit('roomDeleted', roomId);
         res.json({ message: 'Room deleted' });
 
@@ -278,11 +275,10 @@ app.delete('/api/rooms/:id', async (req, res) => {
 // ---------------- ADMIN ROUTES ----------------
 const verifyAdmin = async (req, res, next) => {
     try {
-        const { userId } = req.query; // Simple check for now via query or body
-        // In production, use JWT or Session
+        const { userId } = req.query; 
         if(!userId) return res.status(401).json({error: 'Unauthorized'});
         
-        const user = await User.findById(userId);
+        const user = await User.findByPk(userId);
         if(!user || !user.isAdmin) return res.status(403).json({error: 'Forbidden'});
         
         next();
@@ -293,20 +289,23 @@ const verifyAdmin = async (req, res, next) => {
 
 app.get('/api/admin/data', verifyAdmin, async (req, res) => {
     try {
-        const users = await User.find({}, 'nickname avatar isAdmin createdAt');
-        const rooms = await Room.find({}, 'name createdBy createdAt').populate('createdBy', 'nickname');
+        const users = await User.findAll({ attributes: ['id', 'nickname', 'avatar', 'isAdmin', 'createdAt'] });
+        const rooms = await Room.findAll({ attributes: ['id', 'name', 'createdBy', 'createdAt'] });
+        
+        // Enrich room data with creator nickname if possible (would need manual fetch or association include if strictly defined)
+        // For simplicity, just sending IDs or we can add association: Room.belongsTo(User, {foreignKey: 'createdBy'})
+        
         res.json({ users, rooms });
     } catch (e) {
+        console.log(e);
         res.status(500).json({ error: 'Error fetching admin data' });
     }
 });
 
 app.delete('/api/admin/users/:id', verifyAdmin, async (req, res) => {
     try {
-        await User.findByIdAndDelete(req.params.id);
-        // Also cleanup their rooms or messages if needed? 
-        // For now just user.
-        io.emit('userDeleted', req.params.id); // Force logout on frontend
+        await User.destroy({ where: { id: req.params.id } });
+        io.emit('userDeleted', req.params.id); 
         res.json({ message: 'User deleted' });
     } catch (e) {
         res.status(500).json({ error: 'Error deleting user' });
@@ -315,8 +314,7 @@ app.delete('/api/admin/users/:id', verifyAdmin, async (req, res) => {
 
 app.delete('/api/admin/rooms/:id', verifyAdmin, async (req, res) => {
     try {
-        await Room.findByIdAndDelete(req.params.id);
-        await User.updateMany({ joinedRooms: req.params.id }, { $pull: { joinedRooms: req.params.id } });
+        await Room.destroy({ where: { id: req.params.id } });
         io.emit('roomDeleted', req.params.id);
         res.json({ message: 'Room deleted' });
     } catch (e) {
@@ -368,69 +366,55 @@ const onlineUsers = new Map(); // socket.id -> { nickname, avatar, room }
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  // Send last 50 messages on join (ROOM AWARE)
+  // Send last 50 messages on join
   const loadMessages = async (roomName) => {
     try {
-      if (mongoConnected) {
-          const messages = await Message.find({ room: roomName }).sort({ timestamp: -1 }).limit(50);
-          socket.emit('history', messages.reverse());
-      } else {
-          // Fallback memory store (only supports 'General' effectively)
-          if (roomName === 'General') {
-             socket.emit('history', messageMemoryStore.slice(-50));
-          } else {
+        if (dbConnected) {
+            const messages = await Message.findAll({ 
+                where: { room: roomName },
+                order: [['timestamp', 'DESC']],
+                limit: 50
+            });
+            socket.emit('history', messages.reverse());
+        } else {
              socket.emit('history', []);
-          }
-      }
+        }
     } catch (err) {
       console.error('Error fetching history:', err);
     }
   };
 
   socket.on('join', (data) => {
-    // data: { nickname, avatar, room (optional, default General) }
     const room = data.room || 'General';
     console.log(`User joined room ${room}: ${data.nickname}`);
     
-    // Save user info with room
     onlineUsers.set(socket.id, { ...data, room });
-    
-    // Join socket room
     socket.join(room);
-
-    // Initial load
     loadMessages(room);
 
-    // Notify others in room
     socket.to(room).emit('notification', `${data.nickname} joined the chat`);
     
-    // Update USER LIST for that room
     const requestRoomUsers = Array.from(onlineUsers.values()).filter(u => u.room === room);
     io.to(room).emit('updateUserList', requestRoomUsers);
   });
   
-  // SWITCH ROOM
   socket.on('switchRoom', (newRoom) => {
     const user = onlineUsers.get(socket.id);
     if (!user) return;
 
     const oldRoom = user.room || 'General';
     
-    // Leave old
     socket.leave(oldRoom);
     socket.to(oldRoom).emit('notification', `${user.nickname} left the chat`);
     const oldRoomUsers = Array.from(onlineUsers.values()).filter(u => u.room === oldRoom && u.nickname !== user.nickname);
     io.to(oldRoom).emit('updateUserList', oldRoomUsers);
 
-    // Join new
     user.room = newRoom;
     onlineUsers.set(socket.id, user); 
     socket.join(newRoom);
     
-    // Load history for new room
     loadMessages(newRoom);
 
-    // Notify new room
     socket.to(newRoom).emit('notification', `${user.nickname} joined the chat`);
     const newRoomUsers = Array.from(onlineUsers.values()).filter(u => u.room === newRoom);
     io.to(newRoom).emit('updateUserList', newRoomUsers);
@@ -447,8 +431,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('sendMessage', async (data) => {
-    // data needs to include 'room' now.
-    // However, we can trust the server's knowledge of the user's room to prevent spoofing
     const user = onlineUsers.get(socket.id);
     const room = user ? user.room : 'General';
     
@@ -458,15 +440,14 @@ io.on('connection', (socket) => {
       const msgPayload = {
           ...data,
           room: room, 
+          sender: data.sender || user.nickname, // Ensure sender is present
           timestamp: new Date()
       };
 
-      if (mongoConnected) {
-          const newMessage = new Message(msgPayload);
-          await newMessage.save();
+      if (dbConnected) {
+          const newMessage = await Message.create(msgPayload);
           io.to(room).emit('message', newMessage);
       } else {
-          if (room === 'General') messageMemoryStore.push(msgPayload);
           io.to(room).emit('message', msgPayload);
       }
     } catch (err) {
@@ -491,21 +472,15 @@ io.on('connection', (socket) => {
   const ADMIN_SECRET = process.env.ADMIN_SECRET || 'admin123';
   
   socket.on('clearChat', async (secret) => {
-      // NOTE: This currently clears ALL chat. We might want to scope it to rooms later.
-      // For now, let's keep it global or assume it clears 'General'.
-      // Let's make it clear ONLY the room the admin is in?
-      
       const user = onlineUsers.get(socket.id);
       const room = user ? user.room : 'General';
 
       if (secret === ADMIN_SECRET) {
           try {
-              if (mongoConnected) {
-                  await Message.deleteMany({ room: room }); // Clear only current room
-              } else {
-                  if (room === 'General') messageMemoryStore = [];
+              if (dbConnected) {
+                  await Message.destroy({ where: { room: room } }); 
               }
-              io.to(room).emit('history', []); // Clear view in room
+              io.to(room).emit('history', []); 
               io.to(room).emit('notification', `⚠ ${room} chat history has been cleared by an Admin`);
           } catch (e) {
               console.error(e);
@@ -522,16 +497,19 @@ io.on('connection', (socket) => {
 cron.schedule('0 * * * *', () => {
     console.log('⏳ Starting scheduled backup...');
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `backup-${timestamp}.archive`;
-    const backupPath = path.join(__dirname, '../backups', filename); // Mapped to /app/backups
+    const filename = `backup-${timestamp}.sql`;
+    const backupPath = path.join(__dirname, '../backups', filename); 
 
-    // Ensure directory exists
     if (!fs.existsSync(path.join(__dirname, '../backups'))) {
         fs.mkdirSync(path.join(__dirname, '../backups'));
     }
 
-    // Command: mongodump --uri="mongodb://mongo:27017/chat-app" --archive=...
-    const cmd = `mongodump --uri="${MONGO_URI}" --archive="${backupPath}"`;
+    const dbHost = process.env.DB_HOST || 'localhost';
+    const dbUser = process.env.DB_USER || 'postgres';
+    const dbPass = process.env.DB_PASS || 'sakal';
+    const dbName = process.env.DB_NAME || 'chat-app';
+
+    const cmd = `set PGPASSWORD=${dbPass}&& pg_dump -h ${dbHost} -U ${dbUser} -d ${dbName} -f "${backupPath}"`;
 
     exec(cmd, (error, stdout, stderr) => {
         if (error) {
@@ -539,9 +517,6 @@ cron.schedule('0 * * * *', () => {
             return;
         }
         console.log(`✅ Backup successful: ${filename}`);
-        
-        // Optional: Delete backups older than 24 hours
-        // (For now, let's just keep them all or user can clean up)
     });
 });
 

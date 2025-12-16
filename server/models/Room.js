@@ -1,27 +1,20 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/database');
 
-const roomSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true,
-    minlength: 3,
-    maxlength: 30
-  },
-  password: {
-    type: String,
-    required: true // Password is MANDATORY for custom rooms
-  },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
+const Room = sequelize.define('Room', {
+    name: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true
+    },
+    password: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    createdBy: {
+        type: DataTypes.INTEGER, // Sequelize uses Integers for IDs by default
+        allowNull: false
+    }
 });
 
-module.exports = mongoose.model('Room', roomSchema);
+module.exports = Room;

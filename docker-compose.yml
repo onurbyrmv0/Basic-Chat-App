@@ -1,18 +1,22 @@
 version: '3.8'
 
 services:
-  mongo:
-    image: mongo:latest
-    container_name: chat-mongo
+  postgres:
+    image: postgres:15
+    container_name: chat-postgres
     ports:
-      - "27017:27017"
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=sakal
+      - POSTGRES_DB=chat-app
     healthcheck:
-      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 10s
       timeout: 5s
       retries: 5
     volumes:
-      - mongo-data:/data/db
+      - postgres-data:/var/lib/postgresql/data
 
   server:
     build: ./server
@@ -21,9 +25,13 @@ services:
       - "3000:3000"
     environment:
       - PORT=3000
-      - MONGO_URI=mongodb://mongo:27017/chat-app
+      - DB_HOST=postgres
+      - DB_USER=postgres
+      - DB_PASS=sakal
+      - DB_NAME=chat-app
+      - ADMIN_SECRET=admin123
     depends_on:
-      mongo:
+      postgres:
         condition: service_healthy
     volumes:
       - ./server/uploads:/app/uploads
@@ -38,4 +46,4 @@ services:
       - server
 
 volumes:
-  mongo-data:
+  postgres-data:

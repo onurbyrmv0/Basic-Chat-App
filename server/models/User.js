@@ -1,33 +1,24 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/database');
 
-const userSchema = new mongoose.Schema({
-  nickname: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true,
-    minlength: 3
-  },
-  password: {
-    type: String,
-    required: true
-  },
-  avatar: {
-    type: String,
-    default: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix'
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  joinedRooms: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Room'
-  }],
-  isAdmin: {
-    type: Boolean,
-    default: false
-  }
+const User = sequelize.define('User', {
+    nickname: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true
+    },
+    password: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    avatar: {
+        type: DataTypes.STRING,
+        defaultValue: 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'
+    },
+    isAdmin: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
+    }
 });
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = User;
