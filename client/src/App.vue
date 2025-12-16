@@ -4,9 +4,30 @@ import io from 'socket.io-client';
 import axios from 'axios';
 
 // State
-const joined = ref(false);
-const nickname = ref('');
-const avatar = ref('https://api.dicebear.com/7.x/avataaars/svg?seed=Felix'); // Default
+// State
+// Synchronous LocalStorage Check for FOUC prevention
+const savedUserStr = localStorage.getItem('chat_user');
+let initialJoined = false;
+let initialUser = {};
+let initialJoinedRooms = new Set(['General']);
+
+if (savedUserStr) {
+    try {
+        initialUser = JSON.parse(savedUserStr);
+        if (initialUser.nickname) {
+            initialJoined = true;
+            if (initialUser.joinedRooms && Array.isArray(initialUser.joinedRooms)) {
+                initialUser.joinedRooms.forEach(r => initialJoinedRooms.add(r));
+            }
+        }
+    } catch (e) {
+        localStorage.removeItem('chat_user');
+    }
+}
+
+const joined = ref(initialJoined);
+const nickname = ref(initialUser.nickname || '');
+const avatar = ref(initialUser.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix'); // Default
 const messages = ref([]);
 const newMessage = ref('');
 const fileInput = ref(null);
@@ -38,9 +59,9 @@ const connectRoomName = ref('');
 const connectRoomPassword = ref('');
 const roomToJoin = ref(null);
 const roomJoinPassword = ref('');
-const joinedRooms = ref(new Set(['General'])); 
-const currentUserId = ref('');
-const isAdmin = ref(false); // Admin State
+const joinedRooms = ref(initialJoinedRooms); 
+const currentUserId = ref(initialUser._id || '');
+const isAdmin = ref(initialUser.isAdmin || false); // Admin State
 const showAdminPanel = ref(false); // Admin Modal State
 const adminUsers = ref([]);
 const adminRooms = ref([]);
@@ -569,34 +590,10 @@ const getPreview = (text) => {
     return null;
 };
 
-// AUTO-LOGIN Logic
+// AUTO-LOGIN Logic (Socket only, state is pre-filled)
 onMounted(() => {
-    const savedUser = localStorage.getItem('chat_user');
-    if (savedUser) {
-        try {
-            const user = JSON.parse(savedUser);
-            if (user.nickname && user._id) {
-                nickname.value = user.nickname;
-                avatar.value = user.avatar;
-                currentUserId.value = user._id;
-                isAdmin.value = user.isAdmin;
-                
-                // Restore rooms simple (could re-fetch for full freshness)
-                if (user.joinedRooms && Array.isArray(user.joinedRooms)) {
-                    user.joinedRooms.forEach(r => joinedRooms.value.add(r));
-                }
-                
-                // Note: user.joinedRooms in local storage currently stores Names only from my previous logic
-                // But typically we need ID to fetch messages.
-                // We'll trust joinChat and server 'join' event to get fresh data or history.
-                // Or better: Let's assume we just auto-join.
-                
-                joinChat();
-            }
-        } catch (e) {
-            console.error('Failed to restore session', e);
-            localStorage.removeItem('chat_user');
-        }
+    if (joined.value) {
+        joinChat();
     }
 });
 </script>
