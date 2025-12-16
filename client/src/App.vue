@@ -65,7 +65,9 @@ const isAdmin = ref(initialUser.isAdmin || false); // Admin State
 const showAdminPanel = ref(false); // Admin Modal State
 const adminUsers = ref([]);
 const adminRooms = ref([]);
+const adminRooms = ref([]);
 const adminTab = ref('users'); // 'users' or 'rooms'
+const showProfileMenu = ref(false); // Toggle for profile dropdown
 
 const avatars = [
   'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
@@ -826,6 +828,15 @@ onMounted(() => {
                     </div>
                 </div>
             </div>
+            </div>
+            
+             <!-- LOGOUT BUTTON (Mobile/Sidebar) -->
+             <div class="p-4 border-t border-gray-700 bg-gray-800/95 sticky bottom-0 z-10">
+                 <button @click="logout" class="w-full flex items-center justify-center gap-2 bg-red-600/10 hover:bg-red-600/20 text-red-500 hover:text-red-400 py-3 rounded-xl transition-all font-bold">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                     Logout
+                 </button>
+             </div>
         </aside>
 
         <!-- Main Chat Area -->
@@ -875,11 +886,21 @@ onMounted(() => {
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
              </button>
              <span class="font-semibold text-gray-200 text-sm truncate max-w-[100px]">{{ nickname }}</span>
-             <div class="relative group cursor-pointer">
-                 <img :src="avatar" class="w-8 h-8 rounded-full bg-gray-700 border border-gray-600">
+             <span class="font-semibold text-gray-200 text-sm truncate max-w-[100px]">{{ nickname }}</span>
+             <div class="relative">
+                 <img 
+                    :src="avatar" 
+                    @click="showProfileMenu = !showProfileMenu"
+                    class="w-8 h-8 rounded-full bg-gray-700 border border-gray-600 cursor-pointer hover:ring-2 hover:ring-indigo-500 transition-all"
+                 >
                  <!-- Dropdown for Logout -->
-                 <div class="absolute right-0 top-full mt-2 w-32 bg-gray-800 rounded-lg shadow-xl border border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                     <button @click="logout" class="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-lg">Logout</button>
+                 <div v-if="showProfileMenu" class="absolute right-0 top-full mt-2 w-36 bg-gray-800 rounded-lg shadow-xl border border-gray-700 overflow-hidden z-50 animate-fade-in-up">
+                      <!-- Mobile overlay to close -->
+                     <div class="fixed inset-0 z-[-1]" @click="showProfileMenu = false"></div>
+                     <button @click="logout" class="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-gray-700 hover:text-red-300 flex items-center gap-2">
+                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                         Logout
+                     </button>
                  </div>
              </div>
         </div>
