@@ -4,8 +4,8 @@ WORKDIR /app
 
 COPY package*.json ./
 
-# Install mongodb-tools for backup capability
-RUN apk add --no-cache mongodb-tools
+# Install postgresql-client for backup capability (pg_dump)
+RUN apk add --no-cache postgresql-client
 
 RUN npm install
 
