@@ -92,6 +92,15 @@ const handleAuth = async () => {
             });
         }
         
+        // Save to LocalStorage for persistence
+        localStorage.setItem('chat_user', JSON.stringify({
+            nickname: user.nickname,
+            avatar: user.avatar,
+            _id: user.id || user._id, // Handle both id (SQL) and _id (Mongo legacy/client compat)
+            isAdmin: user.isAdmin,
+            joinedRooms: Array.from(joinedRooms.value) // Save room names
+        }));
+        
         // Connect to Chat
         joinChat();
 
@@ -99,6 +108,12 @@ const handleAuth = async () => {
         console.error('Auth Error:', err);
         alert(err.response?.data?.error || 'Authentication failed');
     }
+};
+
+const logout = () => {
+    localStorage.removeItem('chat_user');
+    // Reload to clear all state cleanly
+    window.location.reload();
 };
 
 const joinChat = () => {
@@ -553,6 +568,37 @@ const getPreview = (text) => {
     }
     return null;
 };
+
+// AUTO-LOGIN Logic
+onMounted(() => {
+    const savedUser = localStorage.getItem('chat_user');
+    if (savedUser) {
+        try {
+            const user = JSON.parse(savedUser);
+            if (user.nickname && user._id) {
+                nickname.value = user.nickname;
+                avatar.value = user.avatar;
+                currentUserId.value = user._id;
+                isAdmin.value = user.isAdmin;
+                
+                // Restore rooms simple (could re-fetch for full freshness)
+                if (user.joinedRooms && Array.isArray(user.joinedRooms)) {
+                    user.joinedRooms.forEach(r => joinedRooms.value.add(r));
+                }
+                
+                // Note: user.joinedRooms in local storage currently stores Names only from my previous logic
+                // But typically we need ID to fetch messages.
+                // We'll trust joinChat and server 'join' event to get fresh data or history.
+                // Or better: Let's assume we just auto-join.
+                
+                joinChat();
+            }
+        } catch (e) {
+            console.error('Failed to restore session', e);
+            localStorage.removeItem('chat_user');
+        }
+    }
+});
 </script>
 
 <template>
@@ -832,7 +878,13 @@ const getPreview = (text) => {
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
              </button>
              <span class="font-semibold text-gray-200 text-sm truncate max-w-[100px]">{{ nickname }}</span>
-             <img :src="avatar" class="w-8 h-8 rounded-full bg-gray-700 border border-gray-600">
+             <div class="relative group cursor-pointer">
+                 <img :src="avatar" class="w-8 h-8 rounded-full bg-gray-700 border border-gray-600">
+                 <!-- Dropdown for Logout -->
+                 <div class="absolute right-0 top-full mt-2 w-32 bg-gray-800 rounded-lg shadow-xl border border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                     <button @click="logout" class="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-lg">Logout</button>
+                 </div>
+             </div>
         </div>
       </header>
 
