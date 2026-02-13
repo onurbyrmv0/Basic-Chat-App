@@ -56,7 +56,7 @@ const connectWithRetry = async () => {
   try {
       await sequelize.authenticate();
       console.log('✅ PostgreSQL connected');
-      await sequelize.sync({ force: false }); // Set force: true to drop/recreate tables (WARNING: DATA LOSS)
+      await sequelize.sync({ alter: true }); // Set alter: true to update existing tables without data loss
       console.log('✅ Models synced');
       dbConnected = true;
 
