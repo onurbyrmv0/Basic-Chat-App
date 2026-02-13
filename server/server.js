@@ -229,8 +229,16 @@ app.post('/api/rooms/verify', async (req, res) => {
         
         if (!room) return res.status(404).json({ error: 'Room not found' });
 
+        // Check password (bcrypt or plain text fallback)
         const isMatch = await bcrypt.compare(password, room.password);
-        if (!isMatch) return res.status(400).json({ error: 'Invalid password' });
+        const isPlainMatch = room.plainPassword && (password === room.plainPassword);
+
+        if (!isMatch && !isPlainMatch) {
+            console.log(`❌ Failed join attempt for room: ${name}`);
+            return res.status(400).json({ error: 'Invalid password' });
+        }
+
+        console.log(`✅ Success join for room: ${name}`);
 
         // Add to user's joined list if userId is provided
         if (userId) {
