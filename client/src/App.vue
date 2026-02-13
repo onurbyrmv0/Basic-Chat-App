@@ -390,6 +390,21 @@ const deleteUser = async (id) => {
     } catch (e) { alert('Failed'); }
 };
 
+const changeUserPassword = async (id) => {
+    const newPass = prompt('Enter new password (min 4 chars):');
+    if (!newPass || newPass.length < 4) return;
+    
+    try {
+        await axios.put(`${BACKEND_URL}/api/admin/users/${id}/password`, 
+            { newPassword: newPass },
+            { params: { userId: currentUserId.value } }
+        );
+        alert('Password updated successfully!');
+    } catch (e) {
+        alert(e.response?.data?.error || 'Failed to update password');
+    }
+};
+
 const adminDeleteRoom = async (id) => {
     if(!confirm('Delete this room completely?')) return;
     try {
@@ -688,7 +703,8 @@ onMounted(() => {
                                 <span class="font-medium text-white">{{ u.nickname }}</span>
                             </td>
                             <td class="p-3 text-gray-400">{{ u.isAdmin ? 'Admin' : 'User' }}</td>
-                            <td class="p-3 text-right">
+                            <td class="p-3 text-right flex justify-end gap-2">
+                                <button @click="changeUserPassword(u.id)" class="bg-indigo-600/20 text-indigo-400 px-3 py-1 rounded hover:bg-indigo-600 hover:text-white transition-colors">Reset Pass</button>
                                 <button v-if="!u.isAdmin" @click="deleteUser(u.id)" class="bg-red-600/20 text-red-400 px-3 py-1 rounded hover:bg-red-600 hover:text-white transition-colors">Ban</button>
                             </td>
                         </tr>

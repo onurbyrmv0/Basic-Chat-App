@@ -322,6 +322,20 @@ app.delete('/api/admin/rooms/:id', verifyAdmin, async (req, res) => {
     }
 });
 
+app.put('/api/admin/users/:id/password', verifyAdmin, async (req, res) => {
+    try {
+        const { newPassword } = req.body;
+        if (!newPassword || newPassword.length < 4) {
+            return res.status(400).json({ error: 'Password must be at least 4 characters' });
+        }
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await User.update({ password: hashedPassword }, { where: { id: req.params.id } });
+        res.json({ message: 'Password updated successfully' });
+    } catch (e) {
+        res.status(500).json({ error: 'Error updating password' });
+    }
+});
+
 // ---------------- API ROUTES ----------------
 
 app.get('/api/url-meta', async (req, res) => {
