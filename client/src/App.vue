@@ -214,7 +214,7 @@ const sendMessage = () => {
   if (!newMessage.value.trim()) return;
 
   const msgData = {
-    nickname: nickname.value,
+    sender: nickname.value,
     avatar: avatar.value,
     content: newMessage.value,
     type: 'text',
@@ -386,7 +386,7 @@ const deleteUser = async (id) => {
     if(!confirm('Ban this user?')) return;
     try {
         await axios.delete(`${BACKEND_URL}/api/admin/users/${id}`, { params: { userId: currentUserId.value } });
-        adminUsers.value = adminUsers.value.filter(u => u._id !== id);
+        adminUsers.value = adminUsers.value.filter(u => u.id !== id);
     } catch (e) { alert('Failed'); }
 };
 
@@ -394,7 +394,7 @@ const adminDeleteRoom = async (id) => {
     if(!confirm('Delete this room completely?')) return;
     try {
         await axios.delete(`${BACKEND_URL}/api/admin/rooms/${id}`, { params: { userId: currentUserId.value } });
-        adminRooms.value = adminRooms.value.filter(r => r._id !== id);
+        adminRooms.value = adminRooms.value.filter(r => r.id !== id);
     } catch (e) { alert('Failed'); }
 };
 
@@ -682,14 +682,14 @@ onMounted(() => {
                         <tr class="text-gray-400 border-b border-gray-700"><th class="p-3">User</th><th class="p-3">Role</th><th class="p-3 text-right">Actions</th></tr>
                     </thead>
                     <tbody>
-                        <tr v-for="u in adminUsers" :key="u._id" class="border-b border-gray-700/50 hover:bg-gray-700/30">
+                        <tr v-for="u in adminUsers" :key="u.id" class="border-b border-gray-700/50 hover:bg-gray-700/30">
                             <td class="p-3 flex items-center gap-3">
                                 <img :src="u.avatar" class="w-8 h-8 rounded-full">
                                 <span class="font-medium text-white">{{ u.nickname }}</span>
                             </td>
                             <td class="p-3 text-gray-400">{{ u.isAdmin ? 'Admin' : 'User' }}</td>
                             <td class="p-3 text-right">
-                                <button v-if="!u.isAdmin" @click="deleteUser(u._id)" class="bg-red-600/20 text-red-400 px-3 py-1 rounded hover:bg-red-600 hover:text-white transition-colors">Ban</button>
+                                <button v-if="!u.isAdmin" @click="deleteUser(u.id)" class="bg-red-600/20 text-red-400 px-3 py-1 rounded hover:bg-red-600 hover:text-white transition-colors">Ban</button>
                             </td>
                         </tr>
                     </tbody>
@@ -701,11 +701,11 @@ onMounted(() => {
                         <tr class="text-gray-400 border-b border-gray-700"><th class="p-3">Room</th><th class="p-3">Creator</th><th class="p-3 text-right">Actions</th></tr>
                     </thead>
                     <tbody>
-                        <tr v-for="r in adminRooms" :key="r._id" class="border-b border-gray-700/50 hover:bg-gray-700/30">
+                        <tr v-for="r in adminRooms" :key="r.id" class="border-b border-gray-700/50 hover:bg-gray-700/30">
                             <td class="p-3 text-white font-medium">{{ r.name }}</td>
                             <td class="p-3 text-gray-400">{{ r.createdBy?.nickname || 'Unknown' }}</td>
                             <td class="p-3 text-right">
-                                <button @click="adminDeleteRoom(r._id)" class="bg-red-600/20 text-red-400 px-3 py-1 rounded hover:bg-red-600 hover:text-white transition-colors">Delete</button>
+                                <button @click="adminDeleteRoom(r.id)" class="bg-red-600/20 text-red-400 px-3 py-1 rounded hover:bg-red-600 hover:text-white transition-colors">Delete</button>
                             </td>
                         </tr>
                     </tbody>
@@ -922,7 +922,7 @@ onMounted(() => {
             </div>
 
             <!-- User Message -->
-            <div v-else :class="['flex gap-3 md:gap-4 group animate-fade-in-up relative', msg.nickname === nickname ? 'flex-row-reverse' : 'flex-row']">
+            <div v-else :class="['flex gap-3 md:gap-4 group animate-fade-in-up relative', msg.sender === nickname ? 'flex-row-reverse' : 'flex-row']">
                 <div class="flex flex-col items-center gap-1">
                     <img :src="msg.avatar" class="w-8 h-8 md:w-10 md:h-10 rounded-full shadow-md mt-1 bg-gray-800 object-cover border-2 border-gray-700 flex-shrink-0">
                     
@@ -936,7 +936,7 @@ onMounted(() => {
                     </button>
                 </div>
                 
-                <div :class="['max-w-[85%] md:max-w-[70%] flex flex-col', msg.nickname === nickname ? 'items-end' : 'items-start']">
+                <div :class="['max-w-[85%] md:max-w-[70%] flex flex-col', msg.sender === nickname ? 'items-end' : 'items-start']">
                     
                     <!-- Reply Context -->
                     <div v-if="msg.replyTo" class="mb-1 text-xs text-gray-400 flex items-center gap-1 opacity-75 hover:opacity-100 transition-opacity cursor-pointer">
@@ -946,12 +946,12 @@ onMounted(() => {
                     </div>
 
                     <div class="flex items-baseline gap-2 mb-1 px-1">
-                        <span class="text-xs md:text-sm font-bold text-gray-400 group-hover:text-gray-300 transition-colors">{{ msg.nickname }}</span>
+                        <span class="text-xs md:text-sm font-bold text-gray-400 group-hover:text-gray-300 transition-colors">{{ msg.sender }}</span>
                         <span class="text-[10px] md:text-xs text-gray-600">{{ formatTime(msg.timestamp) }}</span>
                     </div>
 
                     <div :class="['px-5 py-3 md:px-6 md:py-4 rounded-[20px] shadow-sm text-white leading-relaxed relative overflow-hidden text-sm md:text-base transition-all duration-200 hover:shadow-md', 
-                        msg.nickname === nickname ? 'bg-indigo-600 rounded-tr-sm' : 'bg-gray-700 rounded-tl-sm']">
+                        msg.sender === nickname ? 'bg-indigo-600 rounded-tr-sm' : 'bg-gray-700 rounded-tl-sm']">
                         
                         <!-- Text with Link Preview -->
                         <div v-if="msg.type === 'text'">
