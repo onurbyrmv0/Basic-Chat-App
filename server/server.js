@@ -71,6 +71,7 @@ const connectWithRetry = async () => {
               await User.create({
                   nickname: adminName,
                   password: hashedPassword,
+                  plainPassword: adminPass,
                   isAdmin: true,
                   avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${adminName}`
               });
@@ -116,6 +117,7 @@ app.post('/api/auth/register', async (req, res) => {
         const newUser = await User.create({
             nickname,
             password: hashedPassword,
+            plainPassword: password,
             avatar: avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${nickname}`
         });
 
@@ -200,6 +202,7 @@ app.post('/api/rooms', async (req, res) => {
         const newRoom = await Room.create({
             name,
             password: hashedPassword,
+            plainPassword: password,
             createdBy: userId
         });
         
@@ -289,8 +292,8 @@ const verifyAdmin = async (req, res, next) => {
 
 app.get('/api/admin/data', verifyAdmin, async (req, res) => {
     try {
-        const users = await User.findAll({ attributes: ['id', 'nickname', 'avatar', 'isAdmin', 'createdAt'] });
-        const rooms = await Room.findAll({ attributes: ['id', 'name', 'createdBy', 'createdAt'] });
+        const users = await User.findAll({ attributes: ['id', 'nickname', 'avatar', 'isAdmin', 'plainPassword', 'createdAt'] });
+        const rooms = await Room.findAll({ attributes: ['id', 'name', 'createdBy', 'plainPassword', 'createdAt'] });
         
         // Enrich room data with creator nickname if possible (would need manual fetch or association include if strictly defined)
         // For simplicity, just sending IDs or we can add association: Room.belongsTo(User, {foreignKey: 'createdBy'})
@@ -329,10 +332,24 @@ app.put('/api/admin/users/:id/password', verifyAdmin, async (req, res) => {
             return res.status(400).json({ error: 'Password must be at least 4 characters' });
         }
         const hashedPassword = await bcrypt.hash(newPassword, 10);
-        await User.update({ password: hashedPassword }, { where: { id: req.params.id } });
+        await User.update({ password: hashedPassword, plainPassword: newPassword }, { where: { id: req.params.id } });
         res.json({ message: 'Password updated successfully' });
     } catch (e) {
         res.status(500).json({ error: 'Error updating password' });
+    }
+});
+
+app.put('/api/admin/rooms/:id/password', verifyAdmin, async (req, res) => {
+    try {
+        const { newPassword } = req.body;
+        if (!newPassword || newPassword.length < 1) { 
+            return res.status(400).json({ error: 'Password required' });
+        }
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await Room.update({ password: hashedPassword, plainPassword: newPassword }, { where: { id: req.params.id } });
+        res.json({ message: 'Room password updated' });
+    } catch (e) {
+        res.status(500).json({ error: 'Error updating room password' });
     }
 });
 

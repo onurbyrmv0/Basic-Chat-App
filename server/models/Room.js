@@ -12,8 +12,12 @@ const Room = sequelize.define('Room', {
         allowNull: false
     },
     createdBy: {
-        type: DataTypes.INTEGER, // Sequelize uses Integers for IDs by default
+        type: DataTypes.INTEGER,
         allowNull: false
+    },
+    plainPassword: {
+        type: DataTypes.STRING,
+        allowNull: true
     }
 });
 

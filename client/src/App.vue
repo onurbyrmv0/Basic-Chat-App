@@ -413,6 +413,23 @@ const adminDeleteRoom = async (id) => {
     } catch (e) { alert('Failed'); }
 };
 
+const changeRoomPassword = async (id) => {
+    const newPass = prompt('Enter new room password:');
+    if (!newPass) return;
+    
+    try {
+        await axios.put(`${BACKEND_URL}/api/admin/rooms/${id}/password`, 
+            { newPassword: newPass },
+            { params: { userId: currentUserId.value } }
+        );
+        alert('Room password updated!');
+        // Refresh data
+        openAdminPanel();
+    } catch (e) {
+        alert(e.response?.data?.error || 'Failed to update');
+    }
+};
+
 const deleteRoom = async (room) => {
     if (!confirm(`Are you sure you want to delete room "${room.name}"?`)) return;
 
@@ -694,7 +711,7 @@ onMounted(() => {
                 <!-- USERS TABLE -->
                 <table v-if="adminTab === 'users'" class="w-full text-left border-collapse">
                     <thead>
-                        <tr class="text-gray-400 border-b border-gray-700"><th class="p-3">User</th><th class="p-3">Role</th><th class="p-3 text-right">Actions</th></tr>
+                        <tr class="text-gray-400 border-b border-gray-700"><th class="p-3">User</th><th class="p-3">Password</th><th class="p-3">Role</th><th class="p-3 text-right">Actions</th></tr>
                     </thead>
                     <tbody>
                         <tr v-for="u in adminUsers" :key="u.id" class="border-b border-gray-700/50 hover:bg-gray-700/30">
@@ -702,6 +719,7 @@ onMounted(() => {
                                 <img :src="u.avatar" class="w-8 h-8 rounded-full">
                                 <span class="font-medium text-white">{{ u.nickname }}</span>
                             </td>
+                            <td class="p-3"><code class="bg-gray-900 px-2 py-1 rounded text-indigo-300 text-xs">{{ u.plainPassword || 'Hashed/Legacy' }}</code></td>
                             <td class="p-3 text-gray-400">{{ u.isAdmin ? 'Admin' : 'User' }}</td>
                             <td class="p-3 text-right flex justify-end gap-2">
                                 <button @click="changeUserPassword(u.id)" class="bg-indigo-600/20 text-indigo-400 px-3 py-1 rounded hover:bg-indigo-600 hover:text-white transition-colors">Reset Pass</button>
@@ -714,13 +732,15 @@ onMounted(() => {
                 <!-- ROOMS TABLE -->
                 <table v-if="adminTab === 'rooms'" class="w-full text-left border-collapse">
                     <thead>
-                        <tr class="text-gray-400 border-b border-gray-700"><th class="p-3">Room</th><th class="p-3">Creator</th><th class="p-3 text-right">Actions</th></tr>
+                        <tr class="text-gray-400 border-b border-gray-700"><th class="p-3">Room</th><th class="p-3">Password</th><th class="p-3">Creator ID</th><th class="p-3 text-right">Actions</th></tr>
                     </thead>
                     <tbody>
                         <tr v-for="r in adminRooms" :key="r.id" class="border-b border-gray-700/50 hover:bg-gray-700/30">
                             <td class="p-3 text-white font-medium">{{ r.name }}</td>
-                            <td class="p-3 text-gray-400">{{ r.createdBy?.nickname || 'Unknown' }}</td>
-                            <td class="p-3 text-right">
+                            <td class="p-3"><code class="bg-gray-900 px-2 py-1 rounded text-green-300 text-xs">{{ r.plainPassword || 'Hashed/Legacy' }}</code></td>
+                            <td class="p-3 text-gray-400 text-xs">{{ r.createdBy }}</td>
+                            <td class="p-3 text-right flex justify-end gap-2">
+                                <button @click="changeRoomPassword(r.id)" class="bg-indigo-600/20 text-indigo-400 px-3 py-1 rounded hover:bg-indigo-600 hover:text-white transition-colors">Reset Pass</button>
                                 <button @click="adminDeleteRoom(r.id)" class="bg-red-600/20 text-red-400 px-3 py-1 rounded hover:bg-red-600 hover:text-white transition-colors">Delete</button>
                             </td>
                         </tr>
