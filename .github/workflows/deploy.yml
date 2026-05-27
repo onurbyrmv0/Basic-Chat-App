@@ -24,6 +24,9 @@ jobs:
             # Navigate to the website root directory
             cd /home/onurbayramov-chat/htdocs/${{ secrets.DOMAIN_NAME }}
             
+            # Add git safe directory exception to prevent dubious ownership fatal error
+            git config --global --add safe.directory /home/onurbayramov-chat/htdocs/${{ secrets.DOMAIN_NAME }}
+
             # Pull latest changes from GitHub
             git pull origin main
             
@@ -36,6 +39,5 @@ jobs:
             cd ../server
             npm install
             
-            # Restart the Node.js application in CloudPanel
-            # (Note: Requires SSH user to have clpctl permissions or run as root/sudo)
-            sudo clpctl site:restart --domain=${{ secrets.DOMAIN_NAME }}
+            # Restart the Node.js application service managed by CloudPanel
+            sudo systemctl restart ${{ secrets.DOMAIN_NAME }}
