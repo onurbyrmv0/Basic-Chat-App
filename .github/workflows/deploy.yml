@@ -1,7 +1,6 @@
 # CI/CD Deployment Trigger
 name: Node.js CloudPanel CD
 
-
 on:
   push:
     branches:
@@ -45,21 +44,21 @@ jobs:
             if [ ! -f /etc/systemd/system/chat-app.service ]; then
                 echo "Creating systemd service file..."
                 NODE_PATH=$(which node || echo "/usr/bin/node")
-                sudo bash -c "cat <<EOF > /etc/systemd/system/chat-app.service
-[Unit]
-Description=Real-Time Chat App
-After=network.target
+                sudo bash -c "cat <<'EOF' > /etc/systemd/system/chat-app.service
+            [Unit]
+            Description=Real-Time Chat App
+            After=network.target
 
-[Service]
-Type=simple
-User=onurbayramov-chat
-WorkingDirectory=/home/onurbayramov-chat/htdocs/chat.onurbayramov.codes
-ExecStart=$NODE_PATH app.js
-Restart=on-failure
+            [Service]
+            Type=simple
+            User=onurbayramov-chat
+            WorkingDirectory=/home/onurbayramov-chat/htdocs/chat.onurbayramov.codes
+            ExecStart=$NODE_PATH app.js
+            Restart=on-failure
 
-[Install]
-WantedBy=multi-user.target
-EOF"
+            [Install]
+            WantedBy=multi-user.target
+            EOF"
                 sudo systemctl daemon-reload
                 sudo systemctl enable chat-app
             fi
@@ -67,4 +66,3 @@ EOF"
             # Restart the custom chat-app service
             echo "Restarting chat-app service..."
             sudo systemctl restart chat-app
-
