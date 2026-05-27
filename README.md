@@ -1,9 +1,9 @@
 # 🚀 Real-Time Chat Application
 
-A modern, full-featured real-time chat application built with **Vue 3**, **Node.js**, **Socket.io**, and **MongoDB**.
+A modern, full-featured real-time chat application built with **Vue 3**, **Node.js**, **Socket.io**, and **Firebase Cloud Firestore**.
 
 ![Status](https://img.shields.io/badge/Status-Active-success)
-![Docker](https://img.shields.io/badge/Docker-Supported-blue)
+![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-blueviolet)
 
 ## ✨ Features
 
@@ -13,15 +13,16 @@ A modern, full-featured real-time chat application built with **Vue 3**, **Node.
 - **🔗 Link Previews**: Automatically generates rich preview cards for shared links.
 - **🎤 Voice Messages**: Record and send voice notes directly in the chat.
 - **👀 User Status**: See who is online and who is typing in real-time.
+- **🗑️ Message Management**: Personal message deletion ("Benden Sil") and global message deletion ("Herkesten Sil").
 - **📱 Responsive Design**: Optimized for Desktop and Mobile (PWA-ready layout).
-- **🛡️ Admin Tools**: Admin command to clear chat history.
+- **🛡️ Admin Tools**: Manage users/rooms and clear chat history via a dedicated Admin Panel.
 
 ## 🛠️ Tech Stack
 
 *   **Frontend**: Vue 3, Tailwind CSS v4, Vite
 *   **Backend**: Node.js, Express.js, Socket.io
 *   **Database**: Firebase Cloud Firestore
-*   **Deployment**: Nginx, CloudPanel (with GitHub Actions CI/CD)
+*   **Deployment**: Nginx, CloudPanel, systemd, GitHub Actions (CI/CD)
 
 ## 🚀 Quick Start (Docker)
 
