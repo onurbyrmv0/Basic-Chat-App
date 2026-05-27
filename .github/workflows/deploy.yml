@@ -39,30 +39,10 @@ jobs:
             cd ../server
             npm install
             
-            # Diagnostic: List all systemd services to find the correct service name
-            echo "=== SYSTEMD SERVICES ==="
-            systemctl list-unit-files --all --type=service | grep -E "nodejs|chat|onur|clp" || true
-            echo "=== SYSTEMD SYSTEM DIRECTORY ==="
-            ls -la /etc/systemd/system/ | grep -E "nodejs|chat|onur|clp" || true
+            # Diagnostic: List user-level systemd services
+            echo "=== SYSTEMD USER SERVICES ==="
+            systemctl --user list-units --all --type=service || true
             
-            # Find the correct systemd service name dynamically and restart it
-            SERVICE_NAME=$(systemctl list-units --all --type=service | grep -oE "[a-zA-Z0-9\._-]*${{ secrets.DOMAIN_NAME }}[a-zA-Z0-9\._-]*" | head -n 1)
-            if [ -z "$SERVICE_NAME" ]; then
-                SERVICE_NAME=$(systemctl list-unit-files --all | grep -oE "[a-zA-Z0-9\._-]*${{ secrets.DOMAIN_NAME }}[a-zA-Z0-9\._-]*" | head -n 1)
-            fi
-            
-            # Fallback search if exact domain matches fail
-            if [ -z "$SERVICE_NAME" ]; then
-                SERVICE_NAME=$(systemctl list-unit-files --all | grep -E "nodejs|chat|onur" | grep -v "\.path" | awk '{print $1}' | head -n 1)
-            fi
-            
-            if [ ! -z "$SERVICE_NAME" ]; then
-                echo "Restarting service: $SERVICE_NAME"
-                sudo systemctl restart $SERVICE_NAME
-            else
-                echo "Error: Systemd service not found."
-                exit 1
-            fi
-
-
-
+            # Restart the user-level nodejs service managed by CloudPanel (no sudo required)
+            echo "Restarting Node.js application..."
+            systemctl --user restart nodejs || systemctl --user restart nodejs.service
