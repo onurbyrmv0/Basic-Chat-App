@@ -39,6 +39,19 @@ jobs:
             cd ../server
             npm install
             
-            # Restart the Node.js application service managed by CloudPanel
-            sudo systemctl restart nodejs-${{ secrets.DOMAIN_NAME }}
+            # Find the correct systemd service name dynamically and restart it
+            SERVICE_NAME=$(systemctl list-units --all --type=service | grep -oE "[a-zA-Z0-9\._-]*${{ secrets.DOMAIN_NAME }}[a-zA-Z0-9\._-]*" | head -n 1)
+            if [ -z "$SERVICE_NAME" ]; then
+                SERVICE_NAME=$(systemctl list-unit-files --all | grep -oE "[a-zA-Z0-9\._-]*${{ secrets.DOMAIN_NAME }}[a-zA-Z0-9\._-]*" | head -n 1)
+            fi
+            
+            if [ ! -z "$SERVICE_NAME" ]; then
+                echo "Restarting service: $SERVICE_NAME"
+                sudo systemctl restart $SERVICE_NAME
+            else
+                echo "Error: Systemd service for ${{ secrets.DOMAIN_NAME }} not found. Listing related units:"
+                systemctl list-unit-files --all | grep -E "nodejs|onurbayramov" || true
+                exit 1
+            fi
+
 
