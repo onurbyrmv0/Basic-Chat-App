@@ -40,4 +40,5 @@ jobs:
             npm install
             
             # Restart the Node.js application service managed by CloudPanel
-            sudo systemctl restart ${{ secrets.DOMAIN_NAME }}
+            sudo systemctl restart nodejs-${{ secrets.DOMAIN_NAME }}
+
