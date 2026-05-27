@@ -1,18 +1,19 @@
-const sequelize = require('../config/database');
+const db = require('../config/firebase');
 const User = require('./User');
 const Room = require('./Room');
 const Message = require('./Message');
 
-// Associations
-
-// Users can join many Rooms, Rooms can have many Users
-User.belongsToMany(Room, { through: 'UserRooms', as: 'joinedRooms' });
-Room.belongsToMany(User, { through: 'UserRooms', as: 'members' });
-
-// Room has many messages (optional, messages store room name string currently)
-// For strict relational integrity we could do:
-// Room.hasMany(Message);
-// Message.belongsTo(Room);
+const sequelize = {
+    authenticate: async () => {
+        // Check connectivity to Firestore by doing a lightweight query
+        await db.collection('users').limit(1).get();
+        return true;
+    },
+    sync: async () => {
+        // Firestore is schema-less; sync is a no-op
+        return true;
+    }
+};
 
 module.exports = {
     sequelize,

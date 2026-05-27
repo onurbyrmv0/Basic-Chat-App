@@ -52,12 +52,13 @@ const upload = multer({ storage: storage });
 let dbConnected = false;
 
 const connectWithRetry = async () => {
-  console.log('⏳ Connecting to PostgreSQL...');
+  console.log('⏳ Connecting to Firestore...');
   try {
       await sequelize.authenticate();
-      console.log('✅ PostgreSQL connected');
-      await sequelize.sync({ alter: true }); // Set alter: true to update existing tables without data loss
-      console.log('✅ Models synced');
+      console.log('✅ Firestore connected');
+      await sequelize.sync({ alter: true }); 
+      console.log('✅ Firestore models initialized');
+
       dbConnected = true;
 
       // SEED ADMIN USER 'sakal'
@@ -224,8 +225,13 @@ app.post('/api/rooms', async (req, res) => {
 // VERIFY ROOM PASSWORD
 app.post('/api/rooms/verify', async (req, res) => {
     try {
-        const { name, password, userId } = req.body; 
-        const room = await Room.findOne({ where: { name } });
+        const { name, roomId, password, userId } = req.body; 
+        let room;
+        if (roomId) {
+            room = await Room.findByPk(roomId);
+        } else {
+            room = await Room.findOne({ where: { name } });
+        }
         
         if (!room) return res.status(404).json({ error: 'Room not found' });
 
@@ -406,13 +412,14 @@ io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
   // Send last 50 messages on join
-  const loadMessages = async (roomName) => {
+  const loadMessages = async (roomName, userId) => {
     try {
         if (dbConnected) {
             const messages = await Message.findAll({ 
                 where: { room: roomName },
                 order: [['timestamp', 'DESC']],
-                limit: 50
+                limit: 50,
+                userId: userId
             });
             socket.emit('history', messages.reverse());
         } else {
@@ -427,9 +434,9 @@ io.on('connection', (socket) => {
     const room = data.room || 'General';
     console.log(`User joined room ${room}: ${data.nickname}`);
     
-    onlineUsers.set(socket.id, { ...data, room });
+    onlineUsers.set(socket.id, { ...data, room, userId: data.userId });
     socket.join(room);
-    loadMessages(room);
+    loadMessages(room, data.userId);
 
     socket.to(room).emit('notification', `${data.nickname} joined the chat`);
     
@@ -452,7 +459,7 @@ io.on('connection', (socket) => {
     onlineUsers.set(socket.id, user); 
     socket.join(newRoom);
     
-    loadMessages(newRoom);
+    loadMessages(newRoom, user.userId);
 
     socket.to(newRoom).emit('notification', `${user.nickname} joined the chat`);
     const newRoomUsers = Array.from(onlineUsers.values()).filter(u => u.room === newRoom);
@@ -507,7 +514,40 @@ io.on('connection', (socket) => {
     }
   });
   
+  socket.on('deleteMessage', async (messageId) => {
+    try {
+      if (dbConnected) {
+          await Message.destroy({ where: { id: messageId } });
+      }
+      io.emit('messageDeleted', messageId);
+    } catch (err) {
+      console.error('Error deleting message:', err);
+    }
+  });
+
+  socket.on('deleteMessageForMe', async (data) => {
+    const { messageId, userId } = data;
+    try {
+      if (dbConnected) {
+          const dbRef = require('./config/firebase');
+          const msgRef = dbRef.collection('messages').doc(messageId);
+          const doc = await msgRef.get();
+          if (doc.exists) {
+              const deletedFor = doc.data().deletedFor || [];
+              if (!deletedFor.includes(userId)) {
+                  deletedFor.push(userId);
+                  await msgRef.update({ deletedFor });
+              }
+          }
+      }
+      socket.emit('messageDeletedLocally', messageId);
+    } catch (err) {
+      console.error('Error hiding message locally:', err);
+    }
+  });
+
   // Admin Features
+
   const ADMIN_SECRET = process.env.ADMIN_SECRET || 'admin123';
   
   socket.on('clearChat', async (secret) => {
@@ -532,32 +572,9 @@ io.on('connection', (socket) => {
 });
 
 // ---------------- SCHEDULED BACKUPS ----------------
-// Run every hour: 0 * * * *
-cron.schedule('0 * * * *', () => {
-    console.log('⏳ Starting scheduled backup...');
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `backup-${timestamp}.sql`;
-    const backupPath = path.join(__dirname, '../backups', filename); 
+// Note: Scheduled PostgreSQL backups are disabled because the database has migrated to Firestore.
+// Firestore backups can be configured in the Firebase Console.
 
-    if (!fs.existsSync(path.join(__dirname, '../backups'))) {
-        fs.mkdirSync(path.join(__dirname, '../backups'));
-    }
-
-    const dbHost = process.env.DB_HOST || 'localhost';
-    const dbUser = process.env.DB_USER || 'postgres';
-    const dbPass = process.env.DB_PASS || 'sakal';
-    const dbName = process.env.DB_NAME || 'chat-app';
-
-    const cmd = `set PGPASSWORD=${dbPass}&& pg_dump -h ${dbHost} -U ${dbUser} -d ${dbName} -f "${backupPath}"`;
-
-    exec(cmd, (error, stdout, stderr) => {
-        if (error) {
-            console.error(`❌ Backup failed: ${error.message}`);
-            return;
-        }
-        console.log(`✅ Backup successful: ${filename}`);
-    });
-});
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => { 

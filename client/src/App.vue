@@ -149,7 +149,7 @@ const joinChat = () => {
   socket.value.on('connect', () => {
     connectionError.value = false;
     joined.value = true;
-    socket.value.emit('join', { nickname: nickname.value, avatar: avatar.value, room: currentRoom.value }); 
+    socket.value.emit('join', { nickname: nickname.value, avatar: avatar.value, room: currentRoom.value, userId: currentUserId.value }); 
     // fetchRooms(); // REMOVED: Hidden rooms
   });
 
@@ -182,6 +182,14 @@ const joinChat = () => {
     messages.value.push(msg);
     detectLinks(msg.content);
     scrollToBottom();
+  });
+  
+  socket.value.on('messageDeleted', (msgId) => {
+      messages.value = messages.value.filter(m => m.id !== msgId && m._id !== msgId);
+  });
+
+  socket.value.on('messageDeletedLocally', (msgId) => {
+      messages.value = messages.value.filter(m => m.id !== msgId && m._id !== msgId);
   });
   
   socket.value.on('notification', (text) => {
@@ -526,11 +534,13 @@ const startRecording = async () => {
     };
 
     mediaRecorder.value.start();
+    isRecording.value = true;
   } catch (err) {
     console.error('Error accessing microphone:', err);
     alert('Microphone access denied or not supported.');
   }
 };
+
 
 const stopRecording = () => {
   if (mediaRecorder.value && isRecording.value) {
@@ -579,6 +589,20 @@ const uploadAudio = async (file) => {
     } catch (err) {
         console.error('Audio upload failed', err);
         alert('Failed to send voice message.');
+    }
+};
+
+const deleteMessageForMe = (msgId) => {
+    if (socket.value) {
+        socket.value.emit('deleteMessageForMe', { messageId: msgId, userId: currentUserId.value });
+    }
+};
+
+const deleteMessageForEveryone = (msgId) => {
+    if (confirm('Delete this message for everyone?')) {
+        if (socket.value) {
+            socket.value.emit('deleteMessage', msgId);
+        }
     }
 };
 
@@ -961,15 +985,6 @@ onMounted(() => {
             <div v-else :class="['flex gap-3 md:gap-4 group animate-fade-in-up relative', msg.sender === nickname ? 'flex-row-reverse' : 'flex-row']">
                 <div class="flex flex-col items-center gap-1">
                     <img :src="msg.avatar" class="w-8 h-8 md:w-10 md:h-10 rounded-full shadow-md mt-1 bg-gray-800 object-cover border-2 border-gray-700 flex-shrink-0">
-                    
-                    <!-- Reply Action (Under Avatar) -->
-                    <button 
-                        @click.stop="setReply(msg)" 
-                        class="p-1.5 text-gray-500 hover:text-white hover:bg-indigo-500/50 rounded-full transition-all"
-                        title="Reply"
-                    >
-                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
-                    </button>
                 </div>
                 
                 <div :class="['max-w-[85%] md:max-w-[70%] flex flex-col', msg.sender === nickname ? 'items-end' : 'items-start']">
@@ -981,9 +996,16 @@ onMounted(() => {
                         </span>
                     </div>
 
-                    <div class="flex items-baseline gap-2 mb-1 px-1">
+                    <div class="flex items-baseline gap-2 mb-1 px-1 flex-wrap">
                         <span class="text-xs md:text-sm font-bold text-gray-400 group-hover:text-gray-300 transition-colors">{{ msg.sender }}</span>
-                        <span class="text-[10px] md:text-xs text-gray-600">{{ formatTime(msg.timestamp) }}</span>
+                        <span class="text-[10px] md:text-xs text-gray-600 mr-2">{{ formatTime(msg.timestamp) }}</span>
+                        
+                        <!-- Text Actions -->
+                        <div class="flex gap-2 text-[10px] md:text-xs opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200">
+                            <button @click.stop="setReply(msg)" class="text-indigo-400 hover:text-indigo-300 transition-colors font-medium">Cevapla</button>
+                            <button @click.stop="deleteMessageForMe(msg.id || msg._id)" class="text-amber-400 hover:text-amber-300 transition-colors font-medium">Benden Sil</button>
+                            <button v-if="msg.sender === nickname || isAdmin" @click.stop="deleteMessageForEveryone(msg.id || msg._id)" class="text-red-400 hover:text-red-300 transition-colors font-medium">Herkesten Sil</button>
+                        </div>
                     </div>
 
                     <div :class="['px-5 py-3 md:px-6 md:py-4 rounded-[20px] shadow-sm text-white leading-relaxed relative overflow-hidden text-sm md:text-base transition-all duration-200 hover:shadow-md', 
