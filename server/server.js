@@ -293,13 +293,23 @@ app.delete('/api/rooms/:id', async (req, res) => {
 const verifyAdmin = async (req, res, next) => {
     try {
         const { userId } = req.query; 
-        if(!userId) return res.status(401).json({error: 'Unauthorized'});
+        console.log('[verifyAdmin] Query userId:', userId);
+        if(!userId) {
+            console.log('[verifyAdmin] Missing userId in request');
+            return res.status(401).json({error: 'Unauthorized'});
+        }
         
         const user = await User.findByPk(userId);
-        if(!user || !user.isAdmin) return res.status(403).json({error: 'Forbidden'});
+        console.log('[verifyAdmin] DB User lookup result:', user);
+        if(!user || !user.isAdmin) {
+            console.log(`[verifyAdmin] Access Forbidden. User exists: ${!!user}, isAdmin: ${user ? user.isAdmin : false}`);
+            return res.status(403).json({error: 'Forbidden'});
+        }
         
+        console.log('[verifyAdmin] Authorized successfully');
         next();
     } catch(e) {
+        console.error('[verifyAdmin] Error during admin verification:', e);
         res.status(500).json({error: 'Auth Error'});
     }
 };
