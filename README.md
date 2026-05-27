@@ -20,8 +20,8 @@ A modern, full-featured real-time chat application built with **Vue 3**, **Node.
 
 *   **Frontend**: Vue 3, Tailwind CSS v4, Vite
 *   **Backend**: Node.js, Express.js, Socket.io
-*   **Database**: MongoDB (Mongoose)
-*   **Deployment**: Docker, Nginx, CloudPanel
+*   **Database**: Firebase Cloud Firestore
+*   **Deployment**: Nginx, CloudPanel (with GitHub Actions CI/CD)
 
 ## 🚀 Quick Start (Docker)
 
